@@ -1,16 +1,25 @@
 // Walkable grid per island + A* so the team runs around buildings instead of through them.
 export class NavGrid {
-  constructor(block, cell = 1) {
+  constructor(block, inside, cell = 1) {
     this.block = block; this.cell = cell;
-    this.w = Math.ceil(block.hw * 2 / cell); this.h = Math.ceil(block.hd * 2 / cell);
-    this.x0 = block.cx - block.hw; this.z0 = block.cz - block.hd;
+    const xs = [block.minX, block.maxX, ...block.islets.flatMap(i => [i.x - i.r, i.x + i.r])], zs = [block.minZ, block.maxZ, ...block.islets.flatMap(i => [i.z - i.r, i.z + i.r])];
+    this.x0 = Math.min(...xs) - 2; this.z0 = Math.min(...zs) - 2;
+    this.w = Math.ceil((Math.max(...xs) + 2 - this.x0) / cell); this.h = Math.ceil((Math.max(...zs) + 2 - this.z0) / cell);
     this.blocked = new Uint8Array(this.w * this.h);
-    const m = 1.5;
     for (let j = 0; j < this.h; j++) for (let i = 0; i < this.w; i++) {
       const { x, z } = this.toWorld(i, j);
-      if (Math.abs(x - block.cx) > block.hw - m || Math.abs(z - block.cz) > block.hd - m) this.blocked[j * this.w + i] = 1;
+      if (!inside(x, z)) this.blocked[j * this.w + i] = 1;
     }
   }
+  unblockCircle(x, z, r) {
+    const [i0, j0] = this.toCell(x - r, z - r), [i1, j1] = this.toCell(x + r, z + r);
+    for (let j = j0; j <= j1; j++) for (let i = i0; i <= i1; i++) {
+      if (!this.inside(i, j)) continue;
+      const p = this.toWorld(i, j);
+      if (Math.hypot(p.x - x, p.z - z) <= r) this.blocked[j * this.w + i] = 0;
+    }
+  }
+  isFree(x, z) { return this.free(...this.toCell(x, z)); }
   toCell(x, z) { return [Math.floor((x - this.x0) / this.cell), Math.floor((z - this.z0) / this.cell)]; }
   toWorld(i, j) { return { x: this.x0 + (i + .5) * this.cell, z: this.z0 + (j + .5) * this.cell }; }
   inside(i, j) { return i >= 0 && j >= 0 && i < this.w && j < this.h; }

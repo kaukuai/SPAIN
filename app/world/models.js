@@ -191,6 +191,9 @@ export function filler(b, R, city, w = 3, d = 3) {
   else if (R() > .25) gable(b, w + .25, .9 + R() * .4, d + .25, roof, { y: h, ry: R() > .5 ? 0 : Math.PI / 2 });
   else b.box(w + .15, .3, d + .15, roof, { y: h });
   windows(b, { w, y0: .9, rows: floors, cols: Math.max(1, Math.round(w / 1.2)), z: d / 2 + .02, h: .55, ww: .45, rowGap: 1.05 });
+  if (R() > .55) b.box(.35, .7, .35, '#b5654a', { x: w * .3, y: h + .4, z: -d * .2 });
+  if ((city === 'sevilla' || city === 'granada') && R() > .4) for (let i = 0; i < 3; i++) b.sphere(.16, [C.red, C.pink, '#ff7a3c'][i], { x: -w / 2 + .5 + i * (w - 1) / 2, y: 1.85, z: d / 2 + .18 }, 5);
+  if (city === 'madrid' && floors > 2 && R() > .5) b.box(w * .7, .45, d * .55, '#6aa84f', { y: h + .05 });
   if (city === 'barcelona' || city === 'madrid') for (let r = 1; r < floors; r++) b.box(w * .9, .07, .3, C.dark, { y: .75 + r * 1.05, z: d / 2 + .15 });
   if (city === 'sevilla' && R() > .5) b.box(w + .02, .22, d + .02, C.ochre, { y: .02 });
   door(b, .55, .7, d / 2 + .05, C.choco);
@@ -734,6 +737,148 @@ export const LANDMARKS = {
   'transport|pvg': { h: 4, build(b) { b.box(.25, 3, .25, C.dark, {}); b.box(2.6, .9, .15, C.blue, { y: 2.4 }); b.box(2.4, .5, .17, C.white, { y: 2.6 }, 'light'); b.box(2.6, .9, .15, C.orange, { y: 1.3, ry: .3 }); } },
   'transport|fgc-guell': metro(), 'transport|fgc-espanya': metro(),
 };
+
+Object.assign(LANDMARKS, {
+  // ===== extra real landmarks (scenery) =====
+  'madrid|Puerta del Sol': { h: 7, build(b) {
+    b.cyl(4.3, 4.3, .06, '#eedcbc', { y: .01 }, 26);
+    b.group({ z: -2.4 }, g => { g.box(6.4, 3.4, 2.2, '#d9714f'); g.box(6.6, .3, 2.4, C.white, { y: 3.4 }); windows(g, { w: 6, y0: .5, rows: 2, cols: 7, z: 1.12, h: .7, ww: .4, rowGap: 1.2 });
+      g.box(1.6, 1.8, 1.6, C.white, { y: 3.7 }); g.cyl(.55, .55, .1, C.white, { y: 4.6, z: .82, rx: Math.PI / 2 }, 14, 'light'); g.cone(.6, 1.1, C.slate, { y: 5.5 }, 8); g.sphere(.22, C.gold, { y: 6.7 }, 8, 'light'); });
+    b.group({ x: 2.2, z: 1.6 }, g => { g.box(.9, .7, .9, C.stone); g.cyl(.12, .16, 1.2, C.trunk, { y: .7 }, 6); g.sphere(.6, '#3f7d4a', { y: 2.1 }, 8); for (let i = 0; i < 5; i++) g.sphere(.1, C.red, { x: Math.cos(i) * .45, y: 2 + (i % 2) * .3, z: Math.sin(i) * .45 }, 5); g.sphere(.32, '#7a5a3a', { x: -.25, y: 1.1, z: .2, sx: 1.1, sy: 1.2 }, 8); g.sphere(.18, '#7a5a3a', { x: -.2, y: 1.6, z: .32 }, 6); });
+    fountain(b, 1.2, { x: -2.4, z: 1.4 }, 1);
+    b.box(.9, .05, .5, C.white, { y: .07, z: .2 });
+    tree(b, -3.3, -.2, .9, 'xmas');
+  } },
+  'madrid|Templo de Debod': { h: 4.5, build(b) {
+    b.box(7.4, .1, 3.6, C.water, { y: .04, z: .2 });
+    b.box(7.8, .14, 4, C.stone, { y: 0, z: .2, sy: .5 });
+    for (const z of [2.4, 1]) b.group({ z }, g => { g.box(.6, 2.2, .6, '#e7d3a6', { x: -.7 }); g.box(.6, 2.2, .6, '#e7d3a6', { x: .7 }); g.box(2.2, .5, .7, '#e7d3a6', { y: 2.2 }); });
+    b.group({ z: -1.4 }, g => { g.box(2.6, 2.6, 2.8, '#e7d3a6'); g.box(2.8, .3, 3, '#d8bf8c', { y: 2.6 }); g.box(.8, 1.4, .1, C.dark, { y: 0, z: 1.42 }); });
+    tree(b, -3.4, -2, .7, 'pine'); tree(b, 3.4, -2, .7, 'pine');
+  } },
+  'madrid|Catedral de la Almudena': { h: 9, build(b) {
+    b.box(5.6, 4, 7, '#eef0f2', { z: -.6 });
+    b.box(5.8, .3, 7.2, '#c9ced6', { y: 4, z: -.6 });
+    b.cyl(1.7, 1.8, 1.4, '#eef0f2', { y: 4.2, z: -1.2 }, 16); b.dome(1.9, '#7f97b5', { y: 5.6, z: -1.2, sy: 1.2 }, 16); b.cyl(.3, .4, .8, '#eef0f2', { y: 7.8, z: -1.2 }, 8); b.sphere(.18, C.gold, { y: 8.8, z: -1.2 }, 6, 'light');
+    for (const x of [-2.2, 2.2]) { b.box(1.3, 5.8, 1.3, '#eef0f2', { x, z: 2.4 }); b.dome(.6, '#7f97b5', { x, y: 5.8, z: 2.4 }, 10); }
+    colonnade(b, 4, 2.4, 2.6, .14, C.white, { y: .4, z: 2.95 }); b.box(3.2, .5, .9, '#dfe2e7', { y: 3, z: 2.95 });
+    door(b, .9, 1.4, 2.92, '#6b4a33');
+  } },
+  'madrid|Cuatro Torres': { h: 18, build(b) {
+    b.cyl(4.4, 4.4, .06, '#dde3ea', { y: .01 }, 20);
+    b.group({ x: -2.6, z: -1.6 }, g => { g.box(1.8, 15, 1.8, '#9fc7e6', {}, 'glass'); g.box(1.9, 15, .2, '#e9eef5', { z: .95 }); g.box(2.3, .6, .4, '#e9eef5', { y: 15 }); g.box(.2, 3.2, 1.9, '#e9eef5', { x: -1.05, y: 12.4 }); g.box(.2, 3.2, 1.9, '#e9eef5', { x: 1.05, y: 12.4 }); });
+    b.group({ x: 0, z: -2.4 }, g => { g.box(2, 16.5, 2, '#7fb0d6', {}, 'glass'); for (let i = 0; i < 16; i++) g.box(2.05, .08, 2.05, C.white, { y: i * 1.03 }); g.box(1.2, 1.2, 1.2, C.white, { y: 16.5 }); });
+    b.group({ x: 2.6, z: -1.4 }, g => { g.cyl(1, 1.15, 14, '#b4d7ee', {}, 10, 'glass'); g.cyl(1.05, 1.05, .4, C.white, { y: 14 }, 10); for (let i = 0; i < 7; i++) g.cyl(1.17, 1.17, .12, '#d8e4ee', { y: i * 2 }, 10); });
+    b.group({ x: 1, z: 1.6 }, g => { g.box(2, 13, 1.6, '#c6d9e8', {}, 'glass'); g.box(2.1, .3, 1.7, '#6e7d8f', { y: 13 }); for (let i = 0; i < 13; i++) g.box(.08, 13, .08, '#6e7d8f', { x: -.9 + (i % 4) * .6, z: .82 }); });
+  } },
+  'madrid|Puerta de Europa': { h: 12, build(b) {
+    b.cyl(3.8, 3.8, .06, '#dde3ea', { y: .01 }, 20);
+    for (const s of [-1, 1]) b.group({ x: s * 1.8, rz: s * .26 }, g => { g.box(2, 11, 2, '#8db2cf', {}, 'glass'); for (let i = 0; i < 11; i++) g.box(2.05, .08, 2.05, '#5f6b84', { y: i }); g.box(2.1, .5, 2.1, '#d64545', { y: 11 }); });
+    b.box(.6, 4.4, .6, '#cfd5dc', { y: 0, z: 2.4 }); b.sphere(.5, C.gold, { y: 4.6, z: 2.4 }, 8, 'light');
+  } },
+  'madrid|Estadio Santiago Bernabéu': { h: 6, build(b) {
+    b.cyl(5, 5.2, 4.2, '#c8ced6', { sx: 1.25 }, 28);
+    for (let i = 0; i < 28; i++) { const a = i / 28 * Math.PI * 2; b.box(.18, 4.3, .5, '#e9edf2', { x: Math.cos(a) * 5.25 * 1.25, z: Math.sin(a) * 5.2, ry: -a }); }
+    b.cyl(4.2, 4.2, .1, '#4cae4c', { y: 2.6, sx: 1.25 }, 24); b.box(5, .02, .08, C.white, { y: 2.72 });
+    b.cyl(4.4, 4.6, .3, '#d9dee5', { y: 4.2, sx: 1.25 }, 28);
+    b.box(3.2, .6, .12, C.white, { y: 3.2, z: 5.3 }, 'light');
+  } },
+  'sevilla|Torre del Oro': { h: 7.5, build(b) {
+    b.cyl(2.2, 2.3, 3.6, '#e8b763', {}, 12); crenRing(b, 2.2, 3.6, '#e8b763', 12);
+    b.cyl(1.3, 1.35, 1.8, '#e8b763', { y: 3.6 }, 12); crenRing(b, 1.3, 5.4, '#e8b763', 12);
+    b.cyl(.7, .75, 1, '#f0c977', { y: 5.4 }, 12); b.dome(.75, C.gold, { y: 6.4 }, 12); b.cyl(.04, .04, .6, C.dark, { y: 7.1 }, 4);
+    for (let i = 0; i < 4; i++) b.win(.35, .7, { x: Math.sin(i * 1.57) * 2.25, y: 1.8, z: Math.cos(i * 1.57) * 2.25, ry: i * 1.57 }, '#ffd99a');
+    spanishFlag(b, { x: .1, y: 7 }, 1.4);
+  } },
+  'sevilla|Metropol Parasol': { h: 6, build(b) {
+    const wood = '#ecc07f';
+    for (const [x, z, r] of [[-2.4, -1.4, 2.4], [0, 0, 2.8], [2.6, -.6, 2.2], [1.2, 2.2, 2], [-2, 2, 1.8]]) {
+      b.cyl(.55, .9, 3.6, wood, { x, z }, 10);
+      b.cyl(r, r * .7, 1.1, wood, { x, z, y: 3.6, sx: 1.2 }, 14);
+      for (let k = -2; k <= 2; k++) b.box(r * 2.2, .08, .06, '#c99653', { x, z: z + k * r * .35, y: 4.72 });
+    }
+    b.box(7, .5, 4.6, wood, { y: 4.2, z: .2 });
+    for (let i = 0; i < 8; i++) b.box(7, .06, .06, '#c99653', { y: 4.72, z: -2 + i * .6 });
+  } },
+  'sevilla|Plaza de toros de la Maestranza': { h: 4.5, build(b) {
+    b.cyl(3.7, 3.8, 2.6, C.white, {}, 24); b.cyl(3.75, 3.75, .5, '#e8b75c', { y: 2.1 }, 24); b.cyl(3.8, 3.8, .2, '#c45a3a', { y: 2.6 }, 24);
+    b.cyl(2.6, 2.6, .08, '#f2d39a', { y: 1.9 }, 22);
+    for (let i = 0; i < 18; i++) { const a = i / 18 * Math.PI * 2; b.torus(.26, .06, '#e8b75c', { x: Math.cos(a) * 3.78, y: 1.2, z: Math.sin(a) * 3.78, ry: -a + Math.PI / 2 }, Math.PI, 8); }
+    b.group({ z: 3.6 }, g => { g.box(2, 3.6, .8, '#e8b75c'); g.box(2.2, .3, 1, C.white, { y: 3.6 }); door(g, .8, 1.4, .42, '#6b3a2a'); });
+  } },
+  'sevilla|Torre Sevilla': { h: 17, build(b) {
+    b.cyl(3, 3, .06, '#e5dccc', { y: .01 }, 18);
+    b.cyl(1.6, 1.9, 15, '#a8cde3', { sz: .7 }, 16, 'glass');
+    for (let i = 0; i < 15; i++) b.cyl(1.92, 1.92, .07, C.white, { y: i, sz: .72 }, 16);
+    b.cyl(1.5, 1.6, 1.8, '#d9a066', { y: 15, sz: .7 }, 16);
+    for (let i = 0; i < 12; i++) b.box(.06, 1.8, .06, '#a86a3a', { x: Math.cos(i / 12 * 6.28) * 1.55, y: 15, z: Math.sin(i / 12 * 6.28) * 1.08 });
+  } },
+  'granada|Catedral de Granada': { h: 9, build(b) {
+    b.box(6.4, 4.6, 7, '#f2e6cf', { z: -.8 });
+    b.box(6.6, .3, 7.2, '#e2d2b0', { y: 4.6, z: -.8 });
+    b.group({ z: 2.8 }, g => { g.box(5.6, 6, .8, '#f2e6cf'); for (const x of [-1.6, 0, 1.6]) { g.box(1.2, 4, .12, '#a77a52', { x, z: .42 }); g.torus(.6, .16, '#e2d2b0', { x, y: 4, z: .46 }, Math.PI, 10); } g.box(5.8, .3, 1, '#e2d2b0', { y: 6 }); });
+    b.group({ x: -2.6, z: 2.2 }, g => { g.box(1.6, 7.6, 1.6, '#f2e6cf'); g.box(1.2, 1.2, 1.2, '#f2e6cf', { y: 7.6 }); g.dome(.6, '#c9b07e', { y: 8.8 }, 10); });
+    b.cyl(1.6, 1.7, 1.2, '#f2e6cf', { y: 4.8, z: -1.6 }, 14); b.dome(1.7, '#c9b07e', { y: 6, z: -1.6 }, 14);
+  } },
+  'granada|Sacromonte': { h: 4, build(b, R) {
+    for (let i = 0; i < 9; i++) { const x = -3 + (i % 3) * 3 + (R() - .5), z = -2.4 + Math.floor(i / 3) * 2.3, y = (2 - Math.floor(i / 3)) * .5;
+      b.group({ x, y, z }, g => { g.box(1.8, 1.4, 1.4, C.white); g.box(1.9, .18, 1.5, '#e9ddc6', { y: 1.4 }); g.box(.6, .9, .1, '#4a3b55', { z: .72 }); g.torus(.3, .06, '#4a3b55', { y: .9, z: .74 }, Math.PI, 8); g.sphere(.14, [C.red, C.pink, C.yellow][i % 3], { x: .6, y: .9, z: .78 }, 5); }); }
+    for (const [x, z] of [[-3.6, 2.6], [3.6, 2.4], [0, 3.2]]) b.group({ x, z }, g => { for (let k = 0; k < 4; k++) g.sphere(.3, '#6aa84f', { x: (k % 2) * .3 - .15, y: .3 + k * .35, z: 0, sx: .9, sz: .3, rz: k * .5 }, 7); });
+  } },
+  'barcelona|Camp Nou': { h: 6, build(b) {
+    b.cyl(5.2, 5.5, 3.8, '#e5e8ee', { sx: 1.25 }, 30);
+    for (let i = 0; i < 30; i++) { const a = i / 30 * Math.PI * 2; b.box(.5, 1.2, .2, i % 2 ? '#1d3f8c' : '#a3123a', { x: Math.cos(a) * 5.3 * 1.25, y: 2.2, z: Math.sin(a) * 5.3, ry: -a + Math.PI / 2 }); }
+    b.cyl(4.4, 4.4, .1, '#4cae4c', { y: 2.4, sx: 1.25 }, 26); b.cyl(1, 1, .02, C.white, { y: 2.5 }, 16);
+    b.cyl(4.8, 4.9, .25, '#1d3f8c', { y: 3.8, sx: 1.25 }, 30);
+  } },
+  'barcelona|Torre Glòries': { h: 12, build(b) {
+    b.lathe([[0, 0], [1.9, 0], [2, 4], [1.85, 8], [1.3, 10.6], [.5, 11.6], [0, 11.8]], '#5c86c8', {}, 18);
+    for (let i = 0; i < 70; i++) { const a = i * 2.4, y = .5 + (i * 37 % 100) / 100 * 10, r = y < 8 ? 2.02 : 2.02 - (y - 8) * .3; b.box(.18, .18, .05, MOSAIC[i % 8], { x: Math.cos(a) * r, y, z: Math.sin(a) * r, ry: -a + Math.PI / 2 }, 'light'); }
+  } },
+  'barcelona|Arc de Triomf': { h: 6, build(b) {
+    const c = '#c9583a';
+    b.box(1.4, 4.6, 1.6, c, { x: -1.9 }); b.box(1.4, 4.6, 1.6, c, { x: 1.9 });
+    b.torus(1.25, .3, c, { y: 3.4, z: .5 }, Math.PI, 14); b.torus(1.25, .3, c, { y: 3.4, z: -.5 }, Math.PI, 14);
+    b.box(5.2, 1.2, 1.7, c, { y: 4.4 }); b.box(5.4, .25, 1.9, C.cream, { y: 5.6 });
+    for (const x of [-2.3, 2.3]) { b.cyl(.35, .35, 1, c, { x, y: 5.8 }, 8); b.dome(.35, C.gold, { x, y: 6.8 }, 8); }
+    b.box(3.4, .4, .1, C.cream, { y: 4.7, z: .9 });
+    for (let i = -2; i <= 2; i++) tree(b, i * 1.6, 3.2, .55, 'palm');
+  } },
+  'barcelona|Tibidabo': { h: 11, build(b) {
+    b.group({ x: -1.2, z: -.8 }, g => { g.box(3, 3, 3.6, '#d9d2c4'); for (const x of [-1.2, 1.2]) g.cyl(.4, .45, 4.4, '#d9d2c4', { x, z: 1.5 }, 8); g.box(1.4, 3.4, 1.4, '#d9d2c4', { y: 3 }); g.cone(.8, 2.6, '#cfc6b4', { y: 6.4 }, 8); g.cyl(.18, .22, .9, C.gold, { y: 9 }, 8); g.sphere(.25, C.gold, { y: 10.1 }, 8, 'light'); });
+    b.group({ x: 2.6, z: .6 }, g => { g.box(.2, 2.4, .2, C.dark, { x: -.5, rz: .2 }); g.box(.2, 2.4, .2, C.dark, { x: .5, rz: -.2 }); g.torus(1.8, .08, C.red, { y: 2.6 }, Math.PI * 2, 20); for (let i = 0; i < 8; i++) { const a = i / 8 * Math.PI * 2; g.box(.05, 1.8, .05, C.white, { y: 2.6, rz: a }); g.box(.35, .35, .35, MOSAIC[i], { x: Math.cos(a) * 1.8, y: 2.6 + Math.sin(a) * 1.8 }, 'light'); } });
+  } },
+  'barcelona|MNAC': { h: 9, build(b) {
+    b.group({ z: -2.2 }, g => { g.box(8, 3.6, 3.2, '#e9dcc0'); g.cyl(1.6, 1.7, 1, '#e9dcc0', { y: 3.6 }, 16); g.dome(1.8, '#c7b48d', { y: 4.6, sy: 1.1 }, 16); for (const x of [-3.4, 3.4]) { g.box(1, 5.6, 1, '#e9dcc0', { x, z: 1.2 }); g.cone(.6, 1.2, '#c7b48d', { x, y: 5.6, z: 1.2 }, 8); } colonnade(g, 6, 4, 2.6, .14, C.white, { y: .6, z: 1.7 }); });
+    for (let i = 0; i < 4; i++) b.box(5 - i * .6, .3, 1, '#e9dcc0', { y: i * .3, z: 1 - i * .6 });
+    b.group({ z: 3.4 }, g => { g.cyl(2.4, 2.5, .4, C.stone, {}, 22); g.cyl(2.2, 2.2, .42, C.water, {}, 22); for (let i = 0; i < 12; i++) { const a = i / 12 * Math.PI * 2; g.cyl(.05, .09, 1.6 + (i % 3) * .5, MOSAIC[i % 8], { x: Math.cos(a) * 1.3, y: .4, z: Math.sin(a) * 1.3 }, 5, 'light'); } g.cyl(.12, .2, 3, '#e0f7ff', { y: .4 }, 6, 'light'); });
+  } },
+});
+
+function crenRing(b, r, y, color, n) { for (let i = 0; i < n * 2; i += 2) { const a = i / (n * 2) * Math.PI * 2; b.box(.4, .4, .3, color, { x: Math.cos(a) * r * .97, y, z: Math.sin(a) * r * .97, ry: -a + Math.PI / 2 }); } }
+
+// Cerdà's chamfered Eixample block with an inner courtyard.
+export function eixampleBlock(b, size, R) {
+  const s = size / 2, c = size * .2, inner = size * .3, ci = inner * .4;
+  const oct = (h, ch) => { const sh = new THREE.Shape(); const pts = [[-h + ch, -h], [h - ch, -h], [h, -h + ch], [h, h - ch], [h - ch, h], [-h + ch, h], [-h, h - ch], [-h, -h + ch]]; pts.forEach(([x, y], i) => i ? sh.lineTo(x, y) : sh.moveTo(x, y)); sh.closePath(); return sh; };
+  const shape = oct(s, c); const hole = oct(inner, ci); shape.holes.push(hole);
+  const floors = 4 + Math.floor(R() * 3), h = floors * .75;
+  const wall = pick(['#f3e1c2', '#ead2b0', '#f6e6cf', '#e8cba6', '#f0d8bd'], R);
+  b.extrude(shape, h, wall, { rx: -Math.PI / 2 });
+  b.extrude(shape, .14, '#c9b08f', { rx: -Math.PI / 2, y: h });
+  for (let f = 1; f < floors; f++) { const ring = oct(s + .06, c); ring.holes.push(oct(s - .05, c)); b.extrude(ring, .1, f % 2 ? '#7b6a8f' : '#a9824f', { rx: -Math.PI / 2, y: f * .75 - .05 }); }
+  b.cyl(inner * .9, inner * .9, .05, '#86c46a', { y: .02 }, 8);
+  if (R() > .5) b.sphere(inner * .45, C.leaf, { y: inner * .45 }, 7);
+  for (let i = 0; i < 4; i++) if (R() > .45) b.box(.5, .4, .5, R() > .5 ? '#c96a48' : '#9aa5b5', { x: (R() - .5) * s * 1.4, y: h, z: (R() - .5) * s * 1.4 });
+}
+
+// Modern office tower for business districts.
+export function tower(b, R, h = 8) {
+  const w = 1.8 + R() * .8, color = pick(['#9fc7e6', '#b7d3e6', '#8fb5d3', '#c6dbe8'], R);
+  b.box(w, h, w, color, {}, 'glass');
+  for (let i = 0; i < h; i += 1) b.box(w + .04, .07, w + .04, '#eef2f6', { y: i });
+  b.box(w * .6, .6, w * .6, '#d5dde6', { y: h });
+}
 
 function souvenirShop(main, accent) {
   return b => {

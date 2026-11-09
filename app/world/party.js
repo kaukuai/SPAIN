@@ -32,8 +32,9 @@ function flagTexture() {
   const g = c.getContext('2d');
   g.fillStyle = '#ffd23f'; g.fillRect(0, 0, 256, 160);
   g.fillStyle = '#e8463c'; g.fillRect(0, 0, 256, 34); g.fillRect(0, 126, 256, 34);
-  g.fillStyle = '#c0262d'; g.font = 'bold 64px "PingFang TC","Noto Sans TC",sans-serif'; g.textAlign = 'center'; g.textBaseline = 'middle';
-  g.fillText('西班牙團', 128, 82);
+  g.fillStyle = '#c0262d'; g.textAlign = 'center'; g.textBaseline = 'middle';
+  g.font = 'bold 22px "Arial Rounded MT Bold",sans-serif'; g.fillStyle = '#fff'; g.fillText('HOLYMAN TOUR', 128, 18);
+  g.fillStyle = '#c0262d'; g.font = 'bold 60px "PingFang TC","Noto Sans TC",sans-serif'; g.fillText('西班牙團', 128, 82);
   const t = new THREE.CanvasTexture(c); t.colorSpace = THREE.SRGBColorSpace; return t;
 }
 
@@ -57,7 +58,11 @@ export class Member {
     // torso
     this.torso = part(sphereGeo, def.shirt, { y: .66, sx: .32, sy: .34, sz: .28, outline: true });
     this.body.add(this.torso);
-    this.body.add(part(cylGeo, def.pants, { y: .45, sx: .3, sy: .12, sz: .26 }));
+    if (def.girl) {
+      const skirt = new THREE.Mesh(new THREE.CylinderGeometry(.24, .38, .3, 14), mat(def.skirt));
+      skirt.position.y = .42; skirt.castShadow = true; this.body.add(skirt);
+      const rim = new THREE.Mesh(skirt.geometry, outlineMat); rim.scale.setScalar(1.06); skirt.add(rim);
+    } else this.body.add(part(cylGeo, def.pants, { y: .45, sx: .3, sy: .12, sz: .26 }));
     // arms
     this.arms = [-1, 1].map(side => {
       const pivot = new THREE.Group(); pivot.position.set(side * .33, .82, 0);
@@ -76,7 +81,18 @@ export class Member {
     });
     for (const side of [-1, 1]) head.add(part(sphereGeo, '#ff9aa2', { x: side * .25, y: -.1, z: .32, sx: .07, sy: .04, sz: .03 }));
     head.add(part(sphereGeo, '#c9705a', { y: -.15, z: .39, sx: .06, sy: .025, sz: .02 }));
-    if (def.hood) {
+    if (def.girl) {
+      head.add(part(sphereGeo, def.hair, { y: .1, z: -.05, sx: .47, sy: .38, sz: .44 }));
+      head.add(part(sphereGeo, def.hair, { y: -.12, z: -.16, sx: .42, sy: .42, sz: .3 }));
+      head.add(part(sphereGeo, def.hair, { y: .26, z: .26, sx: .36, sy: .12, sz: .16, rx: .3 }));
+      for (const side of [-1, 1]) {
+        head.add(part(sphereGeo, def.hair, { x: side * .46, y: -.08, z: -.06, sx: .14, sy: .22, sz: .14, outline: true }));
+        head.add(part(sphereGeo, def.bow, { x: side * .42, y: .08, z: -.04, sx: .07, sy: .07, sz: .07 }));
+      }
+      head.add(part(sphereGeo, def.bow, { x: .22, y: .38, z: .1, sx: .12, sy: .08, sz: .06, rz: .4 }));
+      head.add(part(sphereGeo, def.bow, { x: .36, y: .34, z: .1, sx: .12, sy: .08, sz: .06, rz: -.4 }));
+      for (const side of [-1, 1]) head.add(part(new THREE.BoxGeometry(1, 1, 1), '#2b2433', { x: side * .2, y: .1, z: .37, sx: .05, sy: .015, sz: .02, rz: side * -.5 }));
+    } else if (def.hood) {
       head.add(part(sphereGeo, def.hood, { y: .06, z: -.06, sx: .5, sy: .48, sz: .47 }));
       head.children.at(-1).scale.z = .42;
       head.add(part(sphereGeo, def.skin, { y: -.02, z: .14, sx: .38, sy: .35, sz: .32 }));

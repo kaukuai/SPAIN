@@ -7,6 +7,7 @@ import { venueKey } from './map-data.js';
 import { places, transportStops } from './map-places.js';
 import { emptyWishState, validWishData, allWishes, wishPage, wishesForPlace, wishCard, openWishCount, pickGacha, makeCustom, score, levelFor } from './wishlist.js';
 import { sfx } from './world/sfx.js';
+import { emptyToolsState, toolsPage, makeExpense, settleText, fetchToolWeather, fetchRate } from './tools.js';
 
 const APP_BUILD = '__BUILD_ID__';
 
@@ -27,6 +28,7 @@ const paths = {
   user:'M16 7a4 4 0 1 1-8 0 4 4 0 0 1 8 0M4 21v-3a8 8 0 0 1 16 0v3',
   search:'M17 10a7 7 0 1 1-14 0 7 7 0 0 1 14 0m-2 5 6 6',
   world:'M12 21a9 9 0 1 0 0-18 9 9 0 0 0 0 18m4-13-2.5 5.5L8 16l2.5-5.5L16 8',
+  tools:'M14.7 6.3a4 4 0 0 0-5.4 5.4L3 18v3h3l6.3-6.3a4 4 0 0 0 5.4-5.4l-2.6 2.6-2.4-.6-.6-2.4 2.6-2.6',
   wish:'m12 3 2.7 5.6 6.1.9-4.4 4.3 1 6.1L12 17l-5.4 2.9 1-6.1-4.4-4.3 6.1-.9L12 3',
 };
 const icon = name => `<svg aria-hidden="true" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="${paths[name] || paths.pin}"/></svg>`;
@@ -34,12 +36,12 @@ const safeUrl = value => { try { const u = new URL(value); return u.protocol ===
 const extLink = (url, label, cls = 'button secondary') => safeUrl(url) ? `<a class="${cls}" href="${esc(safeUrl(url))}" target="_blank" rel="noopener noreferrer">${label}</a>` : '';
 const money = n => Number(n).toLocaleString('zh-TW', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
 const activityTitle = e => titleFor(e, data().days.find(d => d.date === e.date), data().hotels);
-const state = { tab:'world', wish:{base:null,state:emptyWishState(),ui:{tab:'do',city:'all'}}, date:null, city:null, search:'', filter:'all', mode:'share', privateTrip:null, share:null, preview:null, done:new Set(), offlineReady:false, installing:null, busy:false, syncing:false, syncMessage:'尚未檢查', checkedAt:null, siteVersion:null, swReg:null, shellUpdate:false };
+const state = { tab:'world', tools:emptyToolsState(), toolsLive:{}, wish:{base:null,state:emptyWishState(),ui:{tab:'do',city:'all'}}, date:null, city:null, search:'', filter:'all', mode:'share', privateTrip:null, share:null, preview:null, done:new Set(), offlineReady:false, installing:null, busy:false, syncing:false, syncMessage:'尚未檢查', checkedAt:null, siteVersion:null, swReg:null, shellUpdate:false };
 let viewerUrl, toastTimer, lastRefresh;
 let viewCache;
 let dayMap;
 let world, worldLoading;
-const TABS=['world','now','plan','wish','tickets','trip'];
+const TABS=['world','now','plan','wish','tools','tickets','trip'];
 const data = () => {
   if (state.mode !== 'private' || !state.privateTrip) return state.share;
   if (!viewCache || viewCache.publicTrip !== state.share || viewCache.privateTrip !== state.privateTrip) viewCache = {publicTrip:state.share,privateTrip:state.privateTrip,value:currentTrip(state.share,state.privateTrip)};
@@ -100,7 +102,7 @@ function header() {
   ${state.preview ? `<div class="preview-banner">時間預覽 · ${shortDate(dateInZone(now()))} ${clock(now())} 西班牙 <button data-action="live">回到實際時間</button></div>` : ''}`;
 }
 function navigation() {
-  return `<nav class="bottom-nav" aria-label="主要導覽">${[['world','冒險','world'],['now','現在','now'],['plan','行程','plan'],['wish','願望','wish'],['tickets','票夾','ticket'],['trip','旅程','trip']].map(([key,label,i]) => `<button data-action="tab" data-tab="${key}" class="nav-item ${state.tab === key ? 'active' : ''}" ${state.tab === key ? 'aria-current="page"' : ''}>${icon(i)}<span>${label}</span></button>`).join('')}</nav>`;
+  return `<nav class="bottom-nav" aria-label="主要導覽">${[['world','冒險','world'],['now','現在','now'],['plan','行程','plan'],['wish','願望','wish'],['tools','工具','tools'],['tickets','票夾','ticket'],['trip','旅程','trip']].map(([key,label,i]) => `<button data-action="tab" data-tab="${key}" class="nav-item ${state.tab === key ? 'active' : ''}" ${state.tab === key ? 'aria-current="page"' : ''}>${icon(i)}<span>${label}</span></button>`).join('')}</nav>`;
 }
 function dayPicker() {
   return `<div class="day-picker" aria-label="選擇日期">${data().days.map((d,i) => `<button data-action="day" data-date="${d.date}" class="day-chip ${state.date === d.date ? 'selected' : ''}" aria-pressed="${state.date === d.date}"><small>D${i+1}</small><strong>${shortDate(d.date)}</strong><span>${esc(d.city.split('→')[0])}</span></button>`).join('')}</div>`;
@@ -189,7 +191,7 @@ function render() {
   const updateBanner=data().hasNewerItinerary?'<div class="data-update-banner">已顯示最新行程；同行附件可另匯入新版。<button data-action="tab" data-tab="trip">查看更新</button></div>':'';
   document.body.classList.toggle('is-world',state.tab==='world');
   if (state.tab==='world') $('#app').innerHTML = `<main id="main" class="world-main" tabindex="-1"><h1 class="sr-only">西班牙冒險地圖</h1><div id="world-slot" class="world-slot"></div></main>${navigation()}`;
-  else $('#app').innerHTML = `${header()}${updateBanner}<main id="main" class="main" tabindex="-1">${({now:home,plan:itinerary,tickets,trip:journey,wish:wishes})[state.tab]()}</main>${navigation()}`;
+  else $('#app').innerHTML = `${header()}${updateBanner}<main id="main" class="main" tabindex="-1">${({now:home,plan:itinerary,tickets,trip:journey,wish:wishes,tools})[state.tab]()}</main>${navigation()}`;
   if (state.tab==='world') mountWorld(); else world?.detach();
   if (state.tab==='plan') {
     dayMap ||= new DailyMap();
@@ -198,13 +200,21 @@ function render() {
   if (state.tab==='plan') $('.day-chip.selected')?.scrollIntoView({block:'nearest',inline:'center'});
   window.scrollTo(0,scroll);
 }
+function tools() { if(state.tools.tab==='weather') loadToolWeather(); return toolsPage(state.tools,state.toolsLive); }
+function saveTools() { return saveSetting('toolsState',state.tools).catch(()=>{}); }
+async function loadToolWeather() {
+  if(state.toolsLive.weatherLoading||state.toolsLive.weather) return;
+  state.toolsLive.weatherLoading=true;
+  try { state.toolsLive.weather=await fetchToolWeather(dateInZone(now())); } catch {} finally { state.toolsLive.weatherLoading=false; }
+  if(state.tab==='tools'&&state.toolsLive.weather) render();
+}
 function wishItems() { return allWishes(state.wish.base,state.wish.state); }
-function wishes() { return wishPage(state.wish.base,state.wish.state,state.wish.ui); }
+function wishes() { let passport=[];try{passport=JSON.parse(localStorage.getItem('spain-passport')||'[]');}catch{} return wishPage(state.wish.base,state.wish.state,{...state.wish.ui,passport}); }
 function saveWishes() { return saveSetting('wishState',state.wish.state).catch(()=>toast('願望進度暫時無法儲存在這台裝置')); }
 const WEEKDAY=['日','一','二','三','四','五','六'];
 function dayLabel(day) { const d=new Date(day.date+'T12:00:00Z'), i=data().days.indexOf(day); return `D${i+1} · ${d.getUTCMonth()+1}/${d.getUTCDate()}（${WEEKDAY[d.getUTCDay()]}）`; }
 // Info card for a building in the 3D world: every itinerary visit plus related wishes.
-function placeCard(key) {
+function placeCard(key, opts={}) {
   const visits=[];
   for (const day of data().days) {
     for (const e of day.events) {
@@ -224,7 +234,7 @@ function placeCard(key) {
   const related=wishesForPlace(wishItems(),key);
   const souvenir=key.endsWith('|souvenir');
   const wishHtml=related.length?`<section class="wc-wishes"><h3>${souvenir?'🎁 這座城市的伴手禮清單':'⭐ 願望清單'}</h3>${related.map(i=>wishCard(i,state.wish.state,true)).join('')}<button class="text-button" data-action="tab" data-tab="wish">打開願望清單 →</button></section>`:'';
-  const none=!visits.length&&!souvenir?`<p class="caption">這站不在目前的公開行程時間軸上，可當作順路參考。</p>${extLink(place?.mapUrl||`https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(key.split('|')[1])}`,`${icon('map')}Google 地圖`)}`:'';
+  const none=!visits.length&&!souvenir?`<p class="caption">${opts.decor?'這是城市地標，不在行程時間軸上，順路經過可以看看。':'這站不在目前的公開行程時間軸上，可當作順路參考。'}</p>${extLink(place?.mapUrl||`https://www.google.com/maps/search/?api=1&query=${encodeURIComponent((opts.en||key.split('|')[1])+' '+key.split('|')[0])}`,`${icon('map')}Google 地圖`)}`:'';
   const lead=souvenir?'<p class="caption">把在這裡想買的東西一樣一樣蓋章完成吧！清單可以在「願望」頁新增。</p>':'';
   return `${lead}${intro}${wishHtml}${visitHtml}${none}`;
 }
@@ -312,6 +322,19 @@ async function action(button) {
   else if (a==='persist') {const result=await navigator.storage?.persist?.();toast(result?'已取得較穩定的離線儲存權限':'瀏覽器未提供保留權限；目前資料仍可離線使用，請保留原資料包');}
   else if (a==='install'&&state.installing) {await state.installing.prompt();state.installing=null;render();}
   else if (a==='clear') {if(confirm('要移除這台裝置的同行行程與票券嗎？原始資料包不會刪除。')) {await clearPrivate();state.privateTrip=null;state.mode='share';render();toast('已移除同行資料，現在是分享行程版');}}
+  else if (a==='tool-tab') {state.tools.tab=button.dataset.tab;sfx.play('tap');saveTools();render();}
+  else if (a==='tool-eur') {state.tools.eur=Number(button.dataset.v);saveTools();render();}
+  else if (a==='tool-rate') {try{state.tools.rate=await fetchRate();state.tools.rateAt=Date.now();saveTools();render();toast(`已更新匯率：1 歐元 ≈ ${state.tools.rate} 台幣`);}catch{toast('目前無法取得匯率，可手動輸入銀行匯率');}}
+  else if (a==='split-del') {state.tools.expenses=state.tools.expenses.filter(e=>e.id!==button.dataset.id);await saveTools();render();}
+  else if (a==='split-clear') {if(!confirm('要清空這台手機的所有分帳紀錄嗎？'))return;state.tools.expenses=[];await saveTools();render();}
+  else if (a==='split-copy') {const text=settleText(state.tools);try{await navigator.clipboard.writeText(text);toast('已複製結算，可以貼到群組');}catch{prompt('複製以下內容：',text);}}
+  else if (a==='pack') {state.tools.packed[button.dataset.id]=button.checked;sfx.play(button.checked?'coin':'tap');await saveTools();render();}
+  else if (a==='speak') {
+    if(!('speechSynthesis'in window))return toast('這個瀏覽器不支援語音朗讀');
+    const u=new SpeechSynthesisUtterance(button.dataset.text);u.lang='es-ES';u.rate=.9;
+    const v=speechSynthesis.getVoices().find(v=>v.lang?.startsWith('es-ES'))||speechSynthesis.getVoices().find(v=>v.lang?.startsWith('es'));if(v)u.voice=v;
+    speechSynthesis.cancel();speechSynthesis.speak(u);
+  }
   else if (a==='wish-toggle') await toggleWish(button.dataset.id,button);
   else if (a==='wish-vote') {const v=state.wish.state.votes, id=button.dataset.id, m=button.dataset.member; v[id]=(v[id]||[]).includes(m)?v[id].filter(x=>x!==m):[...(v[id]||[]),m]; sfx.play('tap'); await saveWishes(); render();}
   else if (a==='wish-tab') {state.wish.ui.tab=button.dataset.tab;state.wish.ui.gachaPick=null;sfx.play('tap');render();}
@@ -338,12 +361,16 @@ async function action(button) {
 }
 document.addEventListener('click', e => {const b=e.target.closest('[data-action]');if(b) action(b).catch(error=>{if(error.name!=='AbortError')toast(error.message||'操作未完成，請再試一次');});});
 document.addEventListener('submit', async e => {
+  const split=e.target.closest('[data-split-form]');
+  if(split){e.preventDefault();try{const fd=new FormData(split);const item=makeExpense({title:fd.get('title'),amount:fd.get('amount'),payer:fd.get('payer'),split:fd.getAll('split')});state.tools.expenses.push(item);await saveTools();sfx.play('coin');render();toast(`已記帳：${item.title} €${item.amount.toFixed(2)}`);}catch(error){toast(error.message);}return;}
   const form=e.target.closest('[data-wish-form]'); if(!form) return;
   e.preventDefault();
   try { const item=makeCustom(Object.fromEntries(new FormData(form))); state.wish.state.custom.push(item); await saveWishes(); sfx.play('coin'); state.wish.ui.tab=item.type; render(); toast(`已加入願望：${item.title}`); }
   catch(error) { toast(error.message); }
 });
 document.addEventListener('input', e => {
+  const tool=e.target.dataset?.toolInput;
+  if(tool){const v=Number(e.target.value);if(Number.isFinite(v)&&v>=0){state.tools[tool]=tool==='rate'?(v||null):v;if(tool==='rate')state.tools.rateAt=null;saveTools();const out=$('.money-out strong');if(out)out.textContent=`NT$ ${Math.round((Number(state.tools.eur)||0)*(state.tools.rate||35)).toLocaleString('zh-TW')}`;}return;}
   if(e.target.id==='ticket-search') {state.search=e.target.value;const pos=e.target.selectionStart;render();$('#ticket-search').focus();try{$('#ticket-search').setSelectionRange(pos,pos);}catch{}}
 });
 $('#close-viewer').addEventListener('click',()=>$('#viewer').close());
@@ -402,7 +429,7 @@ if('serviceWorker'in navigator)navigator.serviceWorker.addEventListener('message
 });
 async function boot() {
   try {
-    try {const [p,mode,done,publicTrip,date,wishState]=await Promise.all([read('settings','privateTrip'),read('settings','mode'),read('settings','done'),read('settings','publicTrip'),read('settings','selectedDate'),read('settings','wishState')]);if(wishState&&typeof wishState==='object')state.wish.state={...emptyWishState(),...wishState};state.privateTrip=p||null;state.mode=p?(mode||'private'):'share';state.done=new Set(done||[]);state.share=validPublicTrip(publicTrip)?publicTrip:null;state.date=date||null;}catch{toast('瀏覽器儲存無法使用，目前可瀏覽分享行程版。');}
+    try {const [p,mode,done,publicTrip,date,wishState,toolsState]=await Promise.all([read('settings','privateTrip'),read('settings','mode'),read('settings','done'),read('settings','publicTrip'),read('settings','selectedDate'),read('settings','wishState'),read('settings','toolsState')]);if(wishState&&typeof wishState==='object')state.wish.state={...emptyWishState(),...wishState};if(toolsState&&typeof toolsState==='object')state.tools={...emptyToolsState(),...toolsState};state.privateTrip=p||null;state.mode=p?(mode||'private'):'share';state.done=new Set(done||[]);state.share=validPublicTrip(publicTrip)?publicTrip:null;state.date=date||null;}catch{toast('瀏覽器儲存無法使用，目前可瀏覽分享行程版。');}
     if(data())render();
     loadWishBase();
     await refreshPublicData();

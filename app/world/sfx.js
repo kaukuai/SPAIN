@@ -35,3 +35,32 @@ const SOUNDS = {
   whoosh: [[200, 0, .4, 'sawtooth', .03, 4]],
   close: [[600, 0, .06, 'square', .04], [400, .05, .08, 'square', .04]],
 };
+
+// Optional soft guitar-like loop on the Andalusian cadence (Am–G–F–E). Off by default.
+let musicTimer = null, musicOn = false;
+try { musicOn = localStorage.getItem('spain-music') === 'on'; } catch {}
+const CHORDS = [[220, 261.6, 329.6], [196, 246.9, 293.7], [174.6, 220, 261.6], [164.8, 207.7, 246.9]];
+function pluck(f, t, vol = .045) {
+  const o = ctx.createOscillator(), g = ctx.createGain(), lp = ctx.createBiquadFilter();
+  o.type = 'triangle'; o.frequency.setValueAtTime(f, t);
+  lp.type = 'lowpass'; lp.frequency.value = 1800;
+  g.gain.setValueAtTime(0, t); g.gain.linearRampToValueAtTime(vol, t + .008); g.gain.exponentialRampToValueAtTime(.0001, t + 1.1);
+  o.connect(lp).connect(g).connect(ctx.destination); o.start(t); o.stop(t + 1.2);
+}
+export const music = {
+  get on() { return musicOn; },
+  set(v) {
+    musicOn = v; try { localStorage.setItem('spain-music', v ? 'on' : 'off'); } catch {}
+    if (!v) { clearInterval(musicTimer); musicTimer = null; return; }
+    try { ctx ||= new (window.AudioContext || window.webkitAudioContext)(); ctx.resume?.(); } catch { return; }
+    let bar = 0;
+    const play = () => {
+      if (document.hidden) return;
+      const t0 = ctx.currentTime + .05, ch = CHORDS[bar % 4], beat = .32;
+      const pattern = [0, 1, 2, 1, 2, 1, 0, 2];
+      pattern.forEach((n, i) => pluck(ch[n] * (i === 0 ? .5 : 1), t0 + i * beat, i === 0 ? .06 : .035));
+      bar++;
+    };
+    clearInterval(musicTimer); play(); musicTimer = setInterval(play, 8 * 320);
+  },
+};

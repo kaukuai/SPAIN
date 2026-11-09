@@ -17,3 +17,12 @@ https://opendatacommons.org/licenses/odbl/1-0/
 Individual coordinate sources are retained in map-places.js.
 Online tiles: https://tile.openstreetmap.org/{z}/{x}/{y}.png
 The map displays visible attribution and does not offer offline tile downloads.
+
+Spain outlines (app/world/spain-map.js)
+Instituto Geográfico Nacional (IGN), Equipamiento Geográfico de Referencia Nacional,
+via es-atlas 0.6.0 (https://github.com/martgnz/es-atlas). CC BY 4.0 (https://www.ign.es).
+Decoded from TopoJSON and simplified for display.
+
+Live data used at runtime (no keys, only when online)
+Weather: Open-Meteo (https://open-meteo.com), CC BY 4.0.
+Exchange rate: ExchangeRate-API open access endpoint (https://www.exchangerate-api.com).

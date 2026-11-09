@@ -135,7 +135,8 @@ export function wishPage(base, state, ui) {
     body += addForm(tab, city === 'all' ? 'spain' : city);
   } else if (tab === 'stamps') {
     const doneItems = items.filter(i => state.done[i.id]).sort((a, b) => state.done[a.id] - state.done[b.id]);
-    body = `<div class="stamp-book">${doneItems.map((i, n) => `<div class="stamp-slot got" style="--c:${cityColor(i.city)};--r:${(n * 37 % 21) - 10}deg"><span>${esc(i.emoji)}</span><small>${esc(i.title)}</small><em>${new Date(state.done[i.id]).toLocaleDateString('zh-TW', { month: 'numeric', day: 'numeric' })}</em></div>`).join('')}${Array.from({ length: Math.max(0, Math.min(total, 24) - doneItems.length) }, () => '<div class="stamp-slot"><span>?</span></div>').join('')}</div><p class="caption">完成願望就會蓋上一枚章，順序就是你們的冒險紀錄。</p>`;
+    const passport = new Set(ui.passport || []);
+    body = `<h3 class="wish-sub">🛂 城市入境章（在冒險地圖搭車抵達就會蓋章）</h3><div class="stamp-passport">${WISH_CITIES.slice(0, 4).map(c => `<span class="${passport.has(c.id) ? '' : 'off'}" style="--c:${c.color}">${passport.has(c.id) ? '✔' : '?'}<br>${esc(c.name)}</span>`).join('')}</div><h3 class="wish-sub">🏵️ 願望章</h3><div class="stamp-book">${doneItems.map((i, n) => `<div class="stamp-slot got" style="--c:${cityColor(i.city)};--r:${(n * 37 % 21) - 10}deg"><span>${esc(i.emoji)}</span><small>${esc(i.title)}</small><em>${new Date(state.done[i.id]).toLocaleDateString('zh-TW', { month: 'numeric', day: 'numeric' })}</em></div>`).join('')}${Array.from({ length: Math.max(0, Math.min(total, 24) - doneItems.length) }, () => '<div class="stamp-slot"><span>?</span></div>').join('')}</div><p class="caption">完成願望就會蓋上一枚章，順序就是你們的冒險紀錄。</p>`;
   } else {
     body = `<div class="badge-grid">${badges(items, state).map(b => `<div class="badge-card ${b.got ? 'got' : ''}"><span>${b.icon}</span><strong>${esc(b.name)}</strong><small>${esc(b.desc)}</small></div>`).join('')}</div>`;
   }

@@ -1,7 +1,7 @@
 const CACHE = 'spain-pocket-__BUILD_ID__';
 const BUILD = CACHE.slice('spain-pocket-'.length);
 const BASE = new URL('./', self.location).pathname;
-const FILES = ['./', './index.html', './styles.css', './app.js', './time.js', './presentation.js', './storage.js', './updates.js', './daily-map.js', './map-data.js', './map-places.js', './vendor/leaflet/leaflet.js', './vendor/leaflet/leaflet.css', './version.json', './manifest.webmanifest', './icon.svg', './icon-192.png', './icon-512.png', './data/share.json', './data/wishlist.json', './wishlist.js', './world/world.js', './world/kit.js', './world/layout.js', './world/models.js', './world/party.js', './world/team.js', './world/nav.js', './world/controls.js', './world/sfx.js', './vendor/three/three.module.min.js'];
+const FILES = ['./', './index.html', './styles.css', './app.js', './time.js', './presentation.js', './storage.js', './updates.js', './daily-map.js', './map-data.js', './map-places.js', './vendor/leaflet/leaflet.js', './vendor/leaflet/leaflet.css', './version.json', './manifest.webmanifest', './icon.svg', './icon-192.png', './icon-512.png', './data/share.json', './data/wishlist.json', './wishlist.js', './world/world.js', './world/geo.js', './world/spain-map.js', './world/city-builder.js', './world/life.js', './world/quiz.js', './tools.js', './world/kit.js', './world/layout.js', './world/models.js', './world/party.js', './world/team.js', './world/nav.js', './world/controls.js', './world/sfx.js', './vendor/three/three.module.min.js'];
 const acknowledged = new Set();
 self.addEventListener('message', event => {
   if (event.data?.type === 'CLIENT_VERSION' && event.source?.id) acknowledged.add(event.source.id);
