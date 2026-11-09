@@ -1,7 +1,7 @@
 const CACHE = 'spain-pocket-__BUILD_ID__';
 const BUILD = CACHE.slice('spain-pocket-'.length);
 const BASE = new URL('./', self.location).pathname;
-const FILES = ['./', './index.html', './styles.css', './app.js', './time.js', './presentation.js', './storage.js', './updates.js', './daily-map.js', './map-data.js', './map-places.js', './vendor/leaflet/leaflet.js', './vendor/leaflet/leaflet.css', './version.json', './manifest.webmanifest', './icon.svg', './icon-192.png', './icon-512.png', './data/share.json'];
+const FILES = ['./', './index.html', './styles.css', './app.js', './time.js', './presentation.js', './storage.js', './updates.js', './daily-map.js', './map-data.js', './map-places.js', './vendor/leaflet/leaflet.js', './vendor/leaflet/leaflet.css', './version.json', './manifest.webmanifest', './icon.svg', './icon-192.png', './icon-512.png', './data/share.json', './data/wishlist.json', './wishlist.js', './world/world.js', './world/kit.js', './world/layout.js', './world/models.js', './world/party.js', './world/team.js', './world/nav.js', './world/controls.js', './world/sfx.js', './vendor/three/three.module.min.js'];
 const acknowledged = new Set();
 self.addEventListener('message', event => {
   if (event.data?.type === 'CLIENT_VERSION' && event.source?.id) acknowledged.add(event.source.id);
@@ -39,6 +39,6 @@ async function networkFirst(request) {
 self.addEventListener('fetch', event => {
   const url = new URL(event.request.url);
   if (event.request.method !== 'GET' || url.origin !== self.location.origin || !url.pathname.startsWith(BASE)) return;
-  if (event.request.mode === 'navigate' || url.pathname.endsWith('/data/share.json') || url.pathname.endsWith('/version.json')) event.respondWith(networkFirst(event.request));
+  if (event.request.mode === 'navigate' || url.pathname.endsWith('/data/share.json') || url.pathname.endsWith('/data/wishlist.json') || url.pathname.endsWith('/version.json')) event.respondWith(networkFirst(event.request));
   else event.respondWith(caches.match(event.request).then(cached => cached || fetch(event.request)));
 });

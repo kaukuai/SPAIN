@@ -5,6 +5,11 @@ Distribution obtained from the official npm leaflet@1.9.4 tarball and verified
 against registry dist.integrity (SHA-512); text line endings normalized to LF:
 nxS1ynzJOmOlHp+iL3FyWqK89GtNL8U8rvlMOsQdTTssxZwCXh8N2NB3GDQOL+YR3XnWyZAxwQixURb+FA74PA==
 
+three.js r170 (0.170.0)
+https://threejs.org/
+MIT. Full license: three/LICENSE.txt
+build/three.module.min.js from the official npm three@0.170.0 tarball.
+
 Map coordinates and online street basemap
 OpenStreetMap data copyright OpenStreetMap contributors, ODbL 1.0.
 https://www.openstreetmap.org/copyright

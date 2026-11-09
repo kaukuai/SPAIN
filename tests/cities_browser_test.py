@@ -31,7 +31,7 @@ try:
         context=browser.new_context(viewport={'width':390,'height':844},is_mobile=True,has_touch=True,timezone_id='Asia/Taipei')
         page=context.new_page();page.on('pageerror',lambda e:errors.append(str(e)))
         page.clock.install(time=datetime(2026,10,19,4,0,tzinfo=timezone.utc))
-        page.goto(origin,wait_until='networkidle')
+        page.goto(origin+'/#now',wait_until='networkidle')
         page.wait_for_function('navigator.serviceWorker.controller !== null')
         expect(page.locator('.city-tile')).to_have_count(4)
         for city,venue in [('madrid','馬德里王宮'),('sevilla','Gelateria MITO'),('granada','Sexitana'),('barcelona','El Glop')]:

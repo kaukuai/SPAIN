@@ -21,7 +21,7 @@ try:
     context=browser.new_context(viewport={'width':390,'height':844},is_mobile=True,has_touch=True)
     context.route('https://tile.openstreetmap.org/**',lambda r:r.abort())
     page=context.new_page();page.on('pageerror',lambda e:errors.append(str(e)))
-    page.goto(origin,wait_until='networkidle');page.wait_for_function('navigator.serviceWorker.controller !== null')
+    page.goto(origin+'/#now',wait_until='networkidle');page.wait_for_function('navigator.serviceWorker.controller !== null')
     assert page.request.get(origin+'/'+pack_path.name).status==404
     page.locator('.nav-item[data-tab="tickets"]').click();page.locator('#pack-input').set_input_files(str(pack_path))
     expect(page.locator('#toast')).to_contain_text('匯入完成',timeout=60000)
@@ -49,7 +49,7 @@ try:
     context=browser.new_context(viewport={'width':390,'height':844},is_mobile=True,has_touch=True)
     context.route('https://tile.openstreetmap.org/**',lambda r:r.abort())
     page=context.new_page();page.on('pageerror',lambda e:errors.append(str(e)))
-    page.goto(origin,wait_until='networkidle');page.wait_for_function('navigator.serviceWorker.controller !== null')
+    page.goto(origin+'/#now',wait_until='networkidle');page.wait_for_function('navigator.serviceWorker.controller !== null')
     old=deepcopy(pack);old.pop('retainExistingTicketIds',None);old['trip']['version']='2026-10-16-v2';old['trip']['budget']={'core':100,'allIn':200}
     doc=fitz.open();doc.new_page();raw=doc.tobytes();aid=hashlib.sha256(raw).hexdigest()[:24]
     old['assets'].append({'id':aid,'name':'synthetic-existing-VY1121.pdf','type':'application/pdf','data':base64.b64encode(raw).decode()})

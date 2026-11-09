@@ -14,7 +14,7 @@ with sync_playwright() as p:
     context=browser.new_context(viewport={'width':390,'height':844},device_scale_factor=2,is_mobile=True,has_touch=True,timezone_id='Asia/Taipei')
     page=context.new_page();page.on('pageerror',lambda error:errors.append(str(error)))
     page.clock.install(time=datetime(2026,10,15,4,0,tzinfo=timezone.utc))
-    page.goto('http://127.0.0.1:4173/',wait_until='networkidle')
+    page.goto('http://127.0.0.1:4173/#now',wait_until='networkidle')
     expect(page.locator('h1')).to_contain_text('下一站')
     assert page.evaluate('document.documentElement.scrollWidth <= innerWidth')
     page.wait_for_function('navigator.serviceWorker.controller !== null')

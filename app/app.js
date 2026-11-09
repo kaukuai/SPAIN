@@ -3,6 +3,10 @@ import { read, saveSetting, importPack, clearPrivate, isOlderVersion } from './s
 import { currentTrip, validPublicTrip } from './updates.js';
 import { cities, eventKind, activityTitle as titleFor, eventClock, cityHighlights, calendarText } from './presentation.js';
 import { DailyMap } from './daily-map.js';
+import { venueKey } from './map-data.js';
+import { places, transportStops } from './map-places.js';
+import { emptyWishState, validWishData, allWishes, wishPage, wishesForPlace, wishCard, openWishCount, pickGacha, makeCustom, score, levelFor } from './wishlist.js';
+import { sfx } from './world/sfx.js';
 
 const APP_BUILD = '__BUILD_ID__';
 
@@ -22,16 +26,20 @@ const paths = {
   wifi:'M2 8a16 16 0 0 1 20 0M5 12a11 11 0 0 1 14 0m-11 4a6 6 0 0 1 8 0m-4 4h.01',
   user:'M16 7a4 4 0 1 1-8 0 4 4 0 0 1 8 0M4 21v-3a8 8 0 0 1 16 0v3',
   search:'M17 10a7 7 0 1 1-14 0 7 7 0 0 1 14 0m-2 5 6 6',
+  world:'M12 21a9 9 0 1 0 0-18 9 9 0 0 0 0 18m4-13-2.5 5.5L8 16l2.5-5.5L16 8',
+  wish:'m12 3 2.7 5.6 6.1.9-4.4 4.3 1 6.1L12 17l-5.4 2.9 1-6.1-4.4-4.3 6.1-.9L12 3',
 };
 const icon = name => `<svg aria-hidden="true" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="${paths[name] || paths.pin}"/></svg>`;
 const safeUrl = value => { try { const u = new URL(value); return u.protocol === 'https:' ? u.href : ''; } catch { return ''; } };
 const extLink = (url, label, cls = 'button secondary') => safeUrl(url) ? `<a class="${cls}" href="${esc(safeUrl(url))}" target="_blank" rel="noopener noreferrer">${label}</a>` : '';
 const money = n => Number(n).toLocaleString('zh-TW', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
 const activityTitle = e => titleFor(e, data().days.find(d => d.date === e.date), data().hotels);
-const state = { tab:'now', date:null, city:null, search:'', filter:'all', mode:'share', privateTrip:null, share:null, preview:null, done:new Set(), offlineReady:false, installing:null, busy:false, syncing:false, syncMessage:'尚未檢查', checkedAt:null, siteVersion:null, swReg:null, shellUpdate:false };
+const state = { tab:'world', wish:{base:null,state:emptyWishState(),ui:{tab:'do',city:'all'}}, date:null, city:null, search:'', filter:'all', mode:'share', privateTrip:null, share:null, preview:null, done:new Set(), offlineReady:false, installing:null, busy:false, syncing:false, syncMessage:'尚未檢查', checkedAt:null, siteVersion:null, swReg:null, shellUpdate:false };
 let viewerUrl, toastTimer, lastRefresh;
 let viewCache;
 let dayMap;
+let world, worldLoading;
+const TABS=['world','now','plan','wish','tickets','trip'];
 const data = () => {
   if (state.mode !== 'private' || !state.privateTrip) return state.share;
   if (!viewCache || viewCache.publicTrip !== state.share || viewCache.privateTrip !== state.privateTrip) viewCache = {publicTrip:state.share,privateTrip:state.privateTrip,value:currentTrip(state.share,state.privateTrip)};
@@ -92,7 +100,7 @@ function header() {
   ${state.preview ? `<div class="preview-banner">時間預覽 · ${shortDate(dateInZone(now()))} ${clock(now())} 西班牙 <button data-action="live">回到實際時間</button></div>` : ''}`;
 }
 function navigation() {
-  return `<nav class="bottom-nav" aria-label="主要導覽">${[['now','現在','now'],['plan','行程','plan'],['tickets','票夾','ticket'],['trip','旅程','trip']].map(([key,label,i]) => `<button data-action="tab" data-tab="${key}" class="nav-item ${state.tab === key ? 'active' : ''}" ${state.tab === key ? 'aria-current="page"' : ''}>${icon(i)}<span>${label}</span></button>`).join('')}</nav>`;
+  return `<nav class="bottom-nav" aria-label="主要導覽">${[['world','冒險','world'],['now','現在','now'],['plan','行程','plan'],['wish','願望','wish'],['tickets','票夾','ticket'],['trip','旅程','trip']].map(([key,label,i]) => `<button data-action="tab" data-tab="${key}" class="nav-item ${state.tab === key ? 'active' : ''}" ${state.tab === key ? 'aria-current="page"' : ''}>${icon(i)}<span>${label}</span></button>`).join('')}</nav>`;
 }
 function dayPicker() {
   return `<div class="day-picker" aria-label="選擇日期">${data().days.map((d,i) => `<button data-action="day" data-date="${d.date}" class="day-chip ${state.date === d.date ? 'selected' : ''}" aria-pressed="${state.date === d.date}"><small>D${i+1}</small><strong>${shortDate(d.date)}</strong><span>${esc(d.city.split('→')[0])}</span></button>`).join('')}</div>`;
@@ -179,13 +187,92 @@ function render() {
   if (!data()) return;
   const scroll = window.scrollY;
   const updateBanner=data().hasNewerItinerary?'<div class="data-update-banner">已顯示最新行程；同行附件可另匯入新版。<button data-action="tab" data-tab="trip">查看更新</button></div>':'';
-  $('#app').innerHTML = `${header()}${updateBanner}<main id="main" class="main" tabindex="-1">${({now:home,plan:itinerary,tickets,trip:journey})[state.tab]()}</main>${navigation()}`;
+  document.body.classList.toggle('is-world',state.tab==='world');
+  if (state.tab==='world') $('#app').innerHTML = `<main id="main" class="world-main" tabindex="-1"><h1 class="sr-only">西班牙冒險地圖</h1><div id="world-slot" class="world-slot"></div></main>${navigation()}`;
+  else $('#app').innerHTML = `${header()}${updateBanner}<main id="main" class="main" tabindex="-1">${({now:home,plan:itinerary,tickets,trip:journey,wish:wishes})[state.tab]()}</main>${navigation()}`;
+  if (state.tab==='world') mountWorld(); else world?.detach();
   if (state.tab==='plan') {
     dayMap ||= new DailyMap();
     dayMap.mount($('#daily-map-slot'),selectedDay());
   } else dayMap?.detach();
   if (state.tab==='plan') $('.day-chip.selected')?.scrollIntoView({block:'nearest',inline:'center'});
   window.scrollTo(0,scroll);
+}
+function wishItems() { return allWishes(state.wish.base,state.wish.state); }
+function wishes() { return wishPage(state.wish.base,state.wish.state,state.wish.ui); }
+function saveWishes() { return saveSetting('wishState',state.wish.state).catch(()=>toast('願望進度暫時無法儲存在這台裝置')); }
+const WEEKDAY=['日','一','二','三','四','五','六'];
+function dayLabel(day) { const d=new Date(day.date+'T12:00:00Z'), i=data().days.indexOf(day); return `D${i+1} · ${d.getUTCMonth()+1}/${d.getUTCDate()}（${WEEKDAY[d.getUTCDay()]}）`; }
+// Info card for a building in the 3D world: every itinerary visit plus related wishes.
+function placeCard(key) {
+  const visits=[];
+  for (const day of data().days) {
+    for (const e of day.events) {
+      const options=e.mealOptions?.length?e.mealOptions.map(o=>({...e,...o,mealOptions:undefined})):[e];
+      for (const c of options) if(venueKey(c.venue)===key||(transportStops[e.id]||[]).some(s=>s.key===key)) visits.push({day,e:c});
+    }
+    for (const stop of day.optionalStops||[]) if(venueKey(stop.venue)===key) visits.push({day,e:stop,optional:true});
+  }
+  const place=places[key];
+  const intro=place?.title?`<p class="caption">${esc(place.note||'')}</p>`:'';
+  const byDay=new Map();
+  for (const v of visits) { if(!byDay.has(v.day.date)) byDay.set(v.day.date,[]); byDay.get(v.day.date).push(v); }
+  const visitHtml=[...byDay.values()].map(list=>{
+    const day=list[0].day;
+    return `<section class="wc-visit"><div class="wc-when"><span>${esc(dayLabel(day))}</span><button class="text-button" data-action="day" data-date="${day.date}">看當天行程 →</button></div>${list.map(({e,optional})=>`<article class="wc-event"><div class="wc-time">${optional?'有空再去・無固定時間':esc(timeLabel(e))}${e.category?` · ${esc(e.category)}`:''}</div><h3>${esc(optional?(e.displayTitle||e.title):activityTitle(e))}</h3>${badge(e)}${optional?activityDetails({activity:{description:e.description,mustTry:e.mustTry||[],tips:e.note?[e.note]:[],openingHours:e.openingHours}}):activityDetails(e)}<div class="actions">${extLink(e.mapUrl||place?.mapUrl,`${icon('map')}Google 地圖導航`)}${e.ticketPlan?extLink(e.ticketPlan.url,'購票／官方資訊 ↗'):''}${optional?'':ticketAction(e)}</div></article>`).join('')}</section>`;
+  }).join('');
+  const related=wishesForPlace(wishItems(),key);
+  const souvenir=key.endsWith('|souvenir');
+  const wishHtml=related.length?`<section class="wc-wishes"><h3>${souvenir?'🎁 這座城市的伴手禮清單':'⭐ 願望清單'}</h3>${related.map(i=>wishCard(i,state.wish.state,true)).join('')}<button class="text-button" data-action="tab" data-tab="wish">打開願望清單 →</button></section>`:'';
+  const none=!visits.length&&!souvenir?`<p class="caption">這站不在目前的公開行程時間軸上，可當作順路參考。</p>${extLink(place?.mapUrl||`https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(key.split('|')[1])}`,`${icon('map')}Google 地圖`)}`:'';
+  const lead=souvenir?'<p class="caption">把在這裡想買的東西一樣一樣蓋章完成吧！清單可以在「願望」頁新增。</p>':'';
+  return `${lead}${intro}${wishHtml}${visitHtml}${none}`;
+}
+function setWorldDate(date) { state.date=date; saveSetting('selectedDate',date).catch(()=>{}); world?.refresh(); }
+async function mountWorld() {
+  const slot=$('#world-slot');
+  if (world) return world.mount(slot);
+  slot.innerHTML='<div class="world-loading"><div class="world-spinner"></div><p>正在搭建西班牙小鎮…</p></div>';
+  try {
+    worldLoading ||= import('./world/world.js');
+    const { TravelWorld }=await worldLoading;
+    world ||= new TravelWorld({
+      getTrip:()=>data(), getDate:()=>selectedDay().date, setDate:setWorldDate, today:()=>dateInZone(now()), now,
+      placeCard, wishCount:key=>openWishCount(wishItems(),state.wish.state,key), toast,
+    });
+    if(state.tab==='world') world.mount($('#world-slot'));
+  } catch(error) { console.error(error); if($('#world-slot')) $('#world-slot').innerHTML=`<div class="world-fallback"><h2>3D 地圖暫時無法載入</h2><p>${esc(error.message)}</p><button class="button primary" data-action="tab" data-tab="now">改看行程首頁</button></div>`; }
+}
+function confetti(origin) {
+  const box=origin?.getBoundingClientRect?.()||{left:innerWidth/2,top:innerHeight/2,width:0,height:0};
+  const layer=document.createElement('div'); layer.className='confetti';
+  layer.style.left=`${box.left+box.width/2}px`; layer.style.top=`${box.top+box.height/2}px`;
+  layer.innerHTML=Array.from({length:18},(_,i)=>`<i style="--a:${i*20}deg;--d:${50+(i*37%45)}px;--c:${['#ff6b6b','#ffd23f','#3fc5ff','#6be675','#ff9de2','#9d70e0'][i%6]}"></i>`).join('');
+  document.body.append(layer); setTimeout(()=>layer.remove(),900);
+}
+async function toggleWish(id, button) {
+  const st=state.wish.state, items=wishItems(), item=items.find(i=>i.id===id);
+  if(!item) return;
+  const before=levelFor(score(items,st).xp).level;
+  if(st.done[id]) { delete st.done[id]; sfx.play('close'); }
+  else {
+    st.done[id]=Date.now(); sfx.play('stamp'); setTimeout(()=>sfx.play('coin'),180); confetti(button);
+    const after=levelFor(score(items,st).xp);
+    toast(after.level>before?`🎉 升級！旅行團 Lv.${after.level}「${after.title}」`:`🏵️ 蓋章完成：${item.title}　+${item.points||10} XP`);
+    if(after.level>before) setTimeout(()=>sfx.play('levelup'),400);
+  }
+  await saveWishes(); render();
+  if(!st.done[id]) return;
+  requestAnimationFrame(()=>document.querySelectorAll(`[data-action="wish-toggle"][data-id="${CSS.escape(id)}"]`).forEach(b=>b.closest('.wish')?.classList.add('just-done')));
+}
+async function loadWishBase() {
+  try {
+    const saved=await read('settings','wishBase').catch(()=>null);
+    if(validWishData(saved)&&!state.wish.base) state.wish.base=saved;
+    const response=await fetchFresh('./data/wishlist.json');
+    if(response.ok){const fresh=await response.json();if(validWishData(fresh)){state.wish.base=fresh;saveSetting('wishBase',fresh).catch(()=>{});}}
+  } catch {}
+  if(state.tab==='wish'||state.tab==='world') render();
 }
 function tab(name) { state.tab=name; state.search=''; state.filter='all'; render();window.scrollTo(0,0);history.replaceState(null,'',`#${name}`); }
 async function openAsset(id) {
@@ -225,6 +312,23 @@ async function action(button) {
   else if (a==='persist') {const result=await navigator.storage?.persist?.();toast(result?'已取得較穩定的離線儲存權限':'瀏覽器未提供保留權限；目前資料仍可離線使用，請保留原資料包');}
   else if (a==='install'&&state.installing) {await state.installing.prompt();state.installing=null;render();}
   else if (a==='clear') {if(confirm('要移除這台裝置的同行行程與票券嗎？原始資料包不會刪除。')) {await clearPrivate();state.privateTrip=null;state.mode='share';render();toast('已移除同行資料，現在是分享行程版');}}
+  else if (a==='wish-toggle') await toggleWish(button.dataset.id,button);
+  else if (a==='wish-vote') {const v=state.wish.state.votes, id=button.dataset.id, m=button.dataset.member; v[id]=(v[id]||[]).includes(m)?v[id].filter(x=>x!==m):[...(v[id]||[]),m]; sfx.play('tap'); await saveWishes(); render();}
+  else if (a==='wish-tab') {state.wish.ui.tab=button.dataset.tab;state.wish.ui.gachaPick=null;sfx.play('tap');render();}
+  else if (a==='wish-city') {state.wish.ui.city=button.dataset.city;sfx.play('tap');render();}
+  else if (a==='wish-gacha') {
+    const city=({'馬德':'madrid','塞維':'sevilla','格拉':'granada','巴塞':'barcelona'})[Object.keys({'馬德':1,'塞維':1,'格拉':1,'巴塞':1}).find(k=>selectedDay().city.includes(k))]||'spain';
+    state.wish.ui.gachaSpin=true;state.wish.ui.gachaPick=null;sfx.play('gacha');render();
+    setTimeout(()=>{state.wish.ui.gachaSpin=false;state.wish.ui.gachaPick=pickGacha(wishItems(),state.wish.state,city);if(!state.wish.ui.gachaPick)toast('所有願望都完成了！太厲害了 🎉');render();},900);
+  }
+  else if (a==='wish-delete') {if(!confirm('要刪除這個自己新增的願望嗎？'))return;const st=state.wish.state;st.custom=st.custom.filter(i=>i.id!==button.dataset.id);delete st.done[button.dataset.id];await saveWishes();render();}
+  else if (a==='wish-export') {
+    const mine=state.wish.state.custom||[];
+    if(!mine.length)return toast('這台裝置還沒有自己新增的願望');
+    const text=mine.map(({custom,...i})=>JSON.stringify(i)).join(',\n');
+    try{await navigator.clipboard.writeText(text);toast(`已複製 ${mine.length} 個願望，貼進 wishlist.json 的 items 即可共享`);}catch{prompt('複製以下內容：',text);}
+  }
+  else if (a==='wish-reset') {if(!confirm('要清除這台裝置的蓋章、投票與自己新增的願望嗎？'))return;state.wish.state=emptyWishState();await saveWishes();render();toast('已重設願望進度');}
   else if (a==='share') {
     const url=new URL('./',location.href).href;
     if (/^(localhost|127\.0\.0\.1)$/.test(location.hostname)) return toast('目前是本機預覽；正式上線後即可分享手機網址。');
@@ -233,6 +337,12 @@ async function action(button) {
   }
 }
 document.addEventListener('click', e => {const b=e.target.closest('[data-action]');if(b) action(b).catch(error=>{if(error.name!=='AbortError')toast(error.message||'操作未完成，請再試一次');});});
+document.addEventListener('submit', async e => {
+  const form=e.target.closest('[data-wish-form]'); if(!form) return;
+  e.preventDefault();
+  try { const item=makeCustom(Object.fromEntries(new FormData(form))); state.wish.state.custom.push(item); await saveWishes(); sfx.play('coin'); state.wish.ui.tab=item.type; render(); toast(`已加入願望：${item.title}`); }
+  catch(error) { toast(error.message); }
+});
 document.addEventListener('input', e => {
   if(e.target.id==='ticket-search') {state.search=e.target.value;const pos=e.target.selectionStart;render();$('#ticket-search').focus();try{$('#ticket-search').setSelectionRange(pos,pos);}catch{}}
 });
@@ -253,7 +363,7 @@ $('#pack-input').addEventListener('change',async e=>{
 window.addEventListener('beforeinstallprompt',e=>{e.preventDefault();state.installing=e;if(state.tab==='trip')render();});
 window.addEventListener('online',()=>{render();toast('已恢復連線，正在檢查行程更新');refreshPublicData();});
 window.addEventListener('offline',()=>{render();toast('目前離線，已儲存的行程與附件仍可查看');});
-window.addEventListener('hashchange',()=>{const h=location.hash.slice(1);if(['now','plan','tickets','trip'].includes(h)){state.tab=h;render();window.scrollTo(0,0);}});
+window.addEventListener('hashchange',()=>{const h=location.hash.slice(1);if(TABS.includes(h)){state.tab=h;render();window.scrollTo(0,0);}});
 document.addEventListener('visibilitychange',()=>{if(document.visibilityState==='visible'){render();refreshPublicData();state.swReg?.update().catch(()=>{});}});
 async function fetchFresh(path) {
   const controller=new AbortController();const timeout=setTimeout(()=>controller.abort(),10000);
@@ -292,13 +402,14 @@ if('serviceWorker'in navigator)navigator.serviceWorker.addEventListener('message
 });
 async function boot() {
   try {
-    try {const [p,mode,done,publicTrip,date]=await Promise.all([read('settings','privateTrip'),read('settings','mode'),read('settings','done'),read('settings','publicTrip'),read('settings','selectedDate')]);state.privateTrip=p||null;state.mode=p?(mode||'private'):'share';state.done=new Set(done||[]);state.share=validPublicTrip(publicTrip)?publicTrip:null;state.date=date||null;}catch{toast('瀏覽器儲存無法使用，目前可瀏覽分享行程版。');}
+    try {const [p,mode,done,publicTrip,date,wishState]=await Promise.all([read('settings','privateTrip'),read('settings','mode'),read('settings','done'),read('settings','publicTrip'),read('settings','selectedDate'),read('settings','wishState')]);if(wishState&&typeof wishState==='object')state.wish.state={...emptyWishState(),...wishState};state.privateTrip=p||null;state.mode=p?(mode||'private'):'share';state.done=new Set(done||[]);state.share=validPublicTrip(publicTrip)?publicTrip:null;state.date=date||null;}catch{toast('瀏覽器儲存無法使用，目前可瀏覽分享行程版。');}
     if(data())render();
+    loadWishBase();
     await refreshPublicData();
     if(!data())throw new Error('行程資料尚未載入');
     const today=dateInZone(now());state.date=data().days.some(d=>d.date===today)?today:data().days[0].date;
     const savedDate=await read('settings','selectedDate').catch(()=>null);if(data().days.some(d=>d.date===savedDate))state.date=savedDate;
-    const hash=location.hash.slice(1);if(['now','plan','tickets','trip'].includes(hash))state.tab=hash;
+    const hash=location.hash.slice(1);if(TABS.includes(hash))state.tab=hash;
     render();
     if('serviceWorker'in navigator)navigator.serviceWorker.register('./sw.js',{updateViaCache:'none'}).then(reg=>{state.swReg=reg;return navigator.serviceWorker.ready;}).then(()=>{state.offlineReady=true;if(state.tab==='trip')render();}).catch(()=>toast('離線頁面尚未準備完成，請確認使用 HTTPS 網址。'));
     setInterval(()=>{const key=clock(now())+dateInZone(now());if(key!==lastRefresh&&!state.preview&&!state.busy&&state.tab==='now')render();lastRefresh=key;},15000);

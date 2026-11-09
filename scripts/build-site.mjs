@@ -37,6 +37,15 @@ for (const day of data.days) {
 for (const marker of ['drive.google.com', 'booking-evidence', 'Calle del Arenal', 'Plaza Aviador', 'passport', '護照', '"assets"', '"format":"spain-pocket-trip/v1"']) {
   assert.ok(!dataText.includes(marker), `公開資料含私人資料標記：${marker}`);
 }
+const wishlist = JSON.parse(readFileSync(join(source, 'data', 'wishlist.json'), 'utf8'));
+assert.ok(Array.isArray(wishlist.items) && wishlist.items.length > 0, '願望清單需要 items');
+const wishIds = new Set();
+for (const item of wishlist.items) {
+  assert.ok(item.id && item.title && ['do', 'buy'].includes(item.type), `願望格式不完整：${item.id || item.title}`);
+  assert.ok(['madrid', 'sevilla', 'granada', 'barcelona', 'spain'].includes(item.city), `願望城市不正確：${item.id}`);
+  assert.ok(!wishIds.has(item.id), `願望 id 重複：${item.id}`);
+  wishIds.add(item.id);
+}
 function filesIn(folder) {
   return readdirSync(folder, { withFileTypes: true }).sort((a,b) => a.name.localeCompare(b.name)).flatMap(entry => {
     assert.ok(!entry.isSymbolicLink(), '網站來源不支援符號連結');
