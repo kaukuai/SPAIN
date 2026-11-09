@@ -7,6 +7,8 @@ import { venueKey } from './map-data.js';
 import { places, transportStops } from './map-places.js';
 import { emptyWishState, validWishData, allWishes, wishPage, wishesForPlace, wishCard, openWishCount, pickGacha, makeCustom, score, levelFor } from './wishlist.js';
 import { sfx } from './world/sfx.js';
+import { TeamSync } from './sync.js';
+import { PARTY } from './world/team.js';
 import { emptyToolsState, toolsPage, makeExpense, settleText, fetchToolWeather, fetchRate } from './tools.js';
 
 const APP_BUILD = '__BUILD_ID__';
@@ -200,7 +202,28 @@ function render() {
   if (state.tab==='plan') $('.day-chip.selected')?.scrollIntoView({block:'nearest',inline:'center'});
   window.scrollTo(0,scroll);
 }
-function tools() { if(state.tools.tab==='weather') loadToolWeather(); return toolsPage(state.tools,state.toolsLive); }
+const teamSync=new TeamSync({
+  getState:()=>({wish:state.wish.state,tools:state.tools}),
+  onChange:async()=>{await saveWishes();await saveTools();if(state.tab!=='world')render();world?.refresh();},
+  onStatus:()=>{const el=$('#sync-status');if(el)el.textContent=syncStatusText();},
+});
+function syncStatusText() {
+  if(!teamSync.enabled)return '尚未連線，資料只存在這支手機。';
+  if(teamSync.status==='ok')return `✅ 已同步 ${new Date(teamSync.lastAt).toLocaleTimeString('zh-TW',{hour:'2-digit',minute:'2-digit'})}`;
+  if(teamSync.status==='idle')return '連線中…';
+  return `⚠️ ${teamSync.message}`;
+}
+function syncCard() {
+  const who=teamSync.who;
+  return teamSync.enabled
+    ?`<section class="settings-card sync-card"><h2>👥 團隊同步${teamSync.status==='ok'?'：已連線':''}</h2><p>蓋章、投票、自己新增的願望和分帳紀錄，會自動同步給 holyman、勳、ㄓㄒ、33。</p><p class="sync-status" id="sync-status">${esc(syncStatusText())}</p>
+      <label class="field-label">我是誰（之後可顯示誰蓋的章）<select data-sync-who><option value="">未選擇</option>${PARTY.map(m=>`<option value="${m.id}" ${who===m.id?'selected':''}>${esc(m.name)}</option>`).join('')}</select></label>
+      <div class="actions"><button class="button primary" data-action="sync-now">立即同步</button><button class="button secondary" data-action="wish-export">複製我新增的願望</button><button class="button secondary" data-action="sync-off">在這支手機停用同步</button></div></section>`
+    :`<section class="settings-card sync-card"><h2>👥 團隊同步</h2><p>輸入團隊通關碼後，四個人的蓋章、投票、自己新增的願望和分帳就會共用。只看行程的朋友不需要輸入。</p>
+      <form data-sync-form class="sync-form"><input name="code" type="password" autocomplete="off" required placeholder="團隊通關碼"><button class="button primary" type="submit">連線</button></form><p class="sync-status" id="sync-status">${esc(syncStatusText())}</p>
+      <div class="actions"><button class="button secondary" data-action="wish-export">複製我新增的願望</button><button class="button secondary" data-action="wish-reset">重設這台裝置的進度</button></div></section>`;
+}
+function tools() { if(state.tools.tab==='weather') loadToolWeather(); return toolsPage(state.tools,state.toolsLive)+(state.tools.tab==='split'?syncCard():''); }
 function saveTools() { return saveSetting('toolsState',state.tools).catch(()=>{}); }
 async function loadToolWeather() {
   if(state.toolsLive.weatherLoading||state.toolsLive.weather) return;
@@ -209,7 +232,7 @@ async function loadToolWeather() {
   if(state.tab==='tools'&&state.toolsLive.weather) render();
 }
 function wishItems() { return allWishes(state.wish.base,state.wish.state); }
-function wishes() { let passport=[];try{passport=JSON.parse(localStorage.getItem('spain-passport')||'[]');}catch{} return wishPage(state.wish.base,state.wish.state,{...state.wish.ui,passport}); }
+function wishes() { let passport=[];try{passport=JSON.parse(localStorage.getItem('spain-passport')||'[]');}catch{} return wishPage(state.wish.base,state.wish.state,{...state.wish.ui,passport,syncCard:syncCard()}); }
 function saveWishes() { return saveSetting('wishState',state.wish.state).catch(()=>toast('願望進度暫時無法儲存在這台裝置')); }
 const WEEKDAY=['日','一','二','三','四','五','六'];
 function dayLabel(day) { const d=new Date(day.date+'T12:00:00Z'), i=data().days.indexOf(day); return `D${i+1} · ${d.getUTCMonth()+1}/${d.getUTCDate()}（${WEEKDAY[d.getUTCDay()]}）`; }
@@ -264,9 +287,9 @@ async function toggleWish(id, button) {
   const st=state.wish.state, items=wishItems(), item=items.find(i=>i.id===id);
   if(!item) return;
   const before=levelFor(score(items,st).xp).level;
-  if(st.done[id]) { delete st.done[id]; sfx.play('close'); }
+  if(st.done[id]) { delete st.done[id]; sfx.play('close'); teamSync.change(`done:${id}`,0); }
   else {
-    st.done[id]=Date.now(); sfx.play('stamp'); setTimeout(()=>sfx.play('coin'),180); confetti(button);
+    st.done[id]=Date.now(); teamSync.change(`done:${id}`,st.done[id]); sfx.play('stamp'); setTimeout(()=>sfx.play('coin'),180); confetti(button);
     const after=levelFor(score(items,st).xp);
     toast(after.level>before?`🎉 升級！旅行團 Lv.${after.level}「${after.title}」`:`🏵️ 蓋章完成：${item.title}　+${item.points||10} XP`);
     if(after.level>before) setTimeout(()=>sfx.play('levelup'),400);
@@ -325,8 +348,8 @@ async function action(button) {
   else if (a==='tool-tab') {state.tools.tab=button.dataset.tab;sfx.play('tap');saveTools();render();}
   else if (a==='tool-eur') {state.tools.eur=Number(button.dataset.v);saveTools();render();}
   else if (a==='tool-rate') {try{state.tools.rate=await fetchRate();state.tools.rateAt=Date.now();saveTools();render();toast(`已更新匯率：1 歐元 ≈ ${state.tools.rate} 台幣`);}catch{toast('目前無法取得匯率，可手動輸入銀行匯率');}}
-  else if (a==='split-del') {state.tools.expenses=state.tools.expenses.filter(e=>e.id!==button.dataset.id);await saveTools();render();}
-  else if (a==='split-clear') {if(!confirm('要清空這台手機的所有分帳紀錄嗎？'))return;state.tools.expenses=[];await saveTools();render();}
+  else if (a==='split-del') {teamSync.change(`exp:${button.dataset.id}`,null);state.tools.expenses=state.tools.expenses.filter(e=>e.id!==button.dataset.id);await saveTools();render();}
+  else if (a==='split-clear') {if(!confirm(teamSync.enabled?'要清空全團的分帳紀錄嗎？其他團員的手機也會一起清空。':'要清空這台手機的所有分帳紀錄嗎？'))return;for(const e of state.tools.expenses)teamSync.change(`exp:${e.id}`,null);state.tools.expenses=[];await saveTools();render();}
   else if (a==='split-copy') {const text=settleText(state.tools);try{await navigator.clipboard.writeText(text);toast('已複製結算，可以貼到群組');}catch{prompt('複製以下內容：',text);}}
   else if (a==='pack') {state.tools.packed[button.dataset.id]=button.checked;sfx.play(button.checked?'coin':'tap');await saveTools();render();}
   else if (a==='speak') {
@@ -335,8 +358,10 @@ async function action(button) {
     const v=speechSynthesis.getVoices().find(v=>v.lang?.startsWith('es-ES'))||speechSynthesis.getVoices().find(v=>v.lang?.startsWith('es'));if(v)u.voice=v;
     speechSynthesis.cancel();speechSynthesis.speak(u);
   }
+  else if (a==='sync-now') {toast('同步中…');const ok=await teamSync.sync();toast(ok?'已和團員同步':teamSync.message);}
+  else if (a==='sync-off') {if(!confirm('要在這支手機停用同步嗎？已同步的資料會保留在手機上。'))return;teamSync.disconnect();render();}
   else if (a==='wish-toggle') await toggleWish(button.dataset.id,button);
-  else if (a==='wish-vote') {const v=state.wish.state.votes, id=button.dataset.id, m=button.dataset.member; v[id]=(v[id]||[]).includes(m)?v[id].filter(x=>x!==m):[...(v[id]||[]),m]; sfx.play('tap'); await saveWishes(); render();}
+  else if (a==='wish-vote') {const v=state.wish.state.votes, id=button.dataset.id, m=button.dataset.member; v[id]=(v[id]||[]).includes(m)?v[id].filter(x=>x!==m):[...(v[id]||[]),m]; teamSync.change(`vote:${id}`,v[id]); sfx.play('tap'); await saveWishes(); render();}
   else if (a==='wish-tab') {state.wish.ui.tab=button.dataset.tab;state.wish.ui.gachaPick=null;sfx.play('tap');render();}
   else if (a==='wish-city') {state.wish.ui.city=button.dataset.city;sfx.play('tap');render();}
   else if (a==='wish-gacha') {
@@ -344,14 +369,14 @@ async function action(button) {
     state.wish.ui.gachaSpin=true;state.wish.ui.gachaPick=null;sfx.play('gacha');render();
     setTimeout(()=>{state.wish.ui.gachaSpin=false;state.wish.ui.gachaPick=pickGacha(wishItems(),state.wish.state,city);if(!state.wish.ui.gachaPick)toast('所有願望都完成了！太厲害了 🎉');render();},900);
   }
-  else if (a==='wish-delete') {if(!confirm('要刪除這個自己新增的願望嗎？'))return;const st=state.wish.state;st.custom=st.custom.filter(i=>i.id!==button.dataset.id);delete st.done[button.dataset.id];await saveWishes();render();}
+  else if (a==='wish-delete') {if(!confirm('要刪除這個自己新增的願望嗎？'))return;const st=state.wish.state;st.custom=st.custom.filter(i=>i.id!==button.dataset.id);delete st.done[button.dataset.id];teamSync.change(`custom:${button.dataset.id}`,null);await saveWishes();render();}
   else if (a==='wish-export') {
     const mine=state.wish.state.custom||[];
     if(!mine.length)return toast('這台裝置還沒有自己新增的願望');
     const text=mine.map(({custom,...i})=>JSON.stringify(i)).join(',\n');
     try{await navigator.clipboard.writeText(text);toast(`已複製 ${mine.length} 個願望，貼進 wishlist.json 的 items 即可共享`);}catch{prompt('複製以下內容：',text);}
   }
-  else if (a==='wish-reset') {if(!confirm('要清除這台裝置的蓋章、投票與自己新增的願望嗎？'))return;state.wish.state=emptyWishState();await saveWishes();render();toast('已重設願望進度');}
+  else if (a==='wish-reset') {if(!confirm('要清除這台裝置的蓋章、投票與自己新增的願望嗎？'))return;state.wish.state=emptyWishState();teamSync.meta={};teamSync.saveMeta();await saveWishes();render();toast('已重設願望進度');}
   else if (a==='share') {
     const url=new URL('./',location.href).href;
     if (/^(localhost|127\.0\.0\.1)$/.test(location.hostname)) return toast('目前是本機預覽；正式上線後即可分享手機網址。');
@@ -361,13 +386,16 @@ async function action(button) {
 }
 document.addEventListener('click', e => {const b=e.target.closest('[data-action]');if(b) action(b).catch(error=>{if(error.name!=='AbortError')toast(error.message||'操作未完成，請再試一次');});});
 document.addEventListener('submit', async e => {
+  const syncForm=e.target.closest('[data-sync-form]');
+  if(syncForm){e.preventDefault();const code=new FormData(syncForm).get('code')||'';if(!String(code).trim())return;toast('連線中…');const ok=await teamSync.connect(String(code));render();toast(ok?'🎉 已連線！現在和團員共用願望與分帳':teamSync.message);return;}
   const split=e.target.closest('[data-split-form]');
-  if(split){e.preventDefault();try{const fd=new FormData(split);const item=makeExpense({title:fd.get('title'),amount:fd.get('amount'),payer:fd.get('payer'),split:fd.getAll('split')});state.tools.expenses.push(item);await saveTools();sfx.play('coin');render();toast(`已記帳：${item.title} €${item.amount.toFixed(2)}`);}catch(error){toast(error.message);}return;}
+  if(split){e.preventDefault();try{const fd=new FormData(split);const item=makeExpense({title:fd.get('title'),amount:fd.get('amount'),payer:fd.get('payer'),split:fd.getAll('split')});state.tools.expenses.push(item);teamSync.change(`exp:${item.id}`,item);await saveTools();sfx.play('coin');render();toast(`已記帳：${item.title} €${item.amount.toFixed(2)}`);}catch(error){toast(error.message);}return;}
   const form=e.target.closest('[data-wish-form]'); if(!form) return;
   e.preventDefault();
-  try { const item=makeCustom(Object.fromEntries(new FormData(form))); state.wish.state.custom.push(item); await saveWishes(); sfx.play('coin'); state.wish.ui.tab=item.type; render(); toast(`已加入願望：${item.title}`); }
+  try { const item=makeCustom(Object.fromEntries(new FormData(form))); state.wish.state.custom.push(item); teamSync.change(`custom:${item.id}`,item); await saveWishes(); sfx.play('coin'); state.wish.ui.tab=item.type; render(); toast(`已加入願望：${item.title}`); }
   catch(error) { toast(error.message); }
 });
+document.addEventListener('change', e => { if(e.target.matches?.('[data-sync-who]')) { teamSync.setWho(e.target.value); toast('已記住你是誰'); } });
 document.addEventListener('input', e => {
   const tool=e.target.dataset?.toolInput;
   if(tool){const v=Number(e.target.value);if(Number.isFinite(v)&&v>=0){state.tools[tool]=tool==='rate'?(v||null):v;if(tool==='rate')state.tools.rateAt=null;saveTools();const out=$('.money-out strong');if(out)out.textContent=`NT$ ${Math.round((Number(state.tools.eur)||0)*(state.tools.rate||35)).toLocaleString('zh-TW')}`;}return;}
@@ -391,7 +419,7 @@ window.addEventListener('beforeinstallprompt',e=>{e.preventDefault();state.insta
 window.addEventListener('online',()=>{render();toast('已恢復連線，正在檢查行程更新');refreshPublicData();});
 window.addEventListener('offline',()=>{render();toast('目前離線，已儲存的行程與附件仍可查看');});
 window.addEventListener('hashchange',()=>{const h=location.hash.slice(1);if(TABS.includes(h)){state.tab=h;render();window.scrollTo(0,0);}});
-document.addEventListener('visibilitychange',()=>{if(document.visibilityState==='visible'){render();refreshPublicData();state.swReg?.update().catch(()=>{});}});
+document.addEventListener('visibilitychange',()=>{if(document.visibilityState==='visible'){teamSync.sync();render();refreshPublicData();state.swReg?.update().catch(()=>{});}});
 async function fetchFresh(path) {
   const controller=new AbortController();const timeout=setTimeout(()=>controller.abort(),10000);
   try {return await fetch(path,{cache:'no-store',signal:controller.signal});} finally {clearTimeout(timeout);}
@@ -432,6 +460,8 @@ async function boot() {
     try {const [p,mode,done,publicTrip,date,wishState,toolsState]=await Promise.all([read('settings','privateTrip'),read('settings','mode'),read('settings','done'),read('settings','publicTrip'),read('settings','selectedDate'),read('settings','wishState'),read('settings','toolsState')]);if(wishState&&typeof wishState==='object')state.wish.state={...emptyWishState(),...wishState};if(toolsState&&typeof toolsState==='object')state.tools={...emptyToolsState(),...toolsState};state.privateTrip=p||null;state.mode=p?(mode||'private'):'share';state.done=new Set(done||[]);state.share=validPublicTrip(publicTrip)?publicTrip:null;state.date=date||null;}catch{toast('瀏覽器儲存無法使用，目前可瀏覽分享行程版。');}
     if(data())render();
     loadWishBase();
+    setTimeout(()=>teamSync.sync(),1500);
+    setInterval(()=>{if(document.visibilityState==='visible')teamSync.sync();},45000);
     await refreshPublicData();
     if(!data())throw new Error('行程資料尚未載入');
     const today=dateInZone(now());state.date=data().days.some(d=>d.date===today)?today:data().days[0].date;

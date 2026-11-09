@@ -140,7 +140,7 @@ export function wishPage(base, state, ui) {
   } else {
     body = `<div class="badge-grid">${badges(items, state).map(b => `<div class="badge-card ${b.got ? 'got' : ''}"><span>${b.icon}</span><strong>${esc(b.name)}</strong><small>${esc(b.desc)}</small></div>`).join('')}</div>`;
   }
-  const footer = `<section class="settings-card wish-share"><h2>和朋友同步願望</h2><p>勾選完成、投票和自己新增的願望只存在這支手機。想讓所有人都看到新願望，把下面複製的內容加進 GitHub 的 <code>app/data/wishlist.json</code>，推送後 Vercel 會自動更新。</p><div class="actions"><button class="button secondary" data-action="wish-export">複製我新增的願望</button><button class="button secondary" data-action="wish-reset">重設這台裝置的進度</button></div></section>`;
+  const footer = ui.syncCard || `<section class="settings-card wish-share"><h2>和朋友同步願望</h2><p>勾選完成、投票和自己新增的願望只存在這支手機。想讓所有人都看到新願望，把下面複製的內容加進 GitHub 的 <code>app/data/wishlist.json</code>，推送後 Vercel 會自動更新。</p><div class="actions"><button class="button secondary" data-action="wish-export">複製我新增的願望</button><button class="button secondary" data-action="wish-reset">重設這台裝置的進度</button></div></section>`;
   return `<div class="page-heading"><div><p class="eyebrow">WISH LIST</p><h1>願望清單</h1></div></div>${header}${gacha}${tabs}${body}${footer}`;
 }
 
