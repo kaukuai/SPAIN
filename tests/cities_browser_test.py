@@ -21,7 +21,9 @@ origin=f'http://127.0.0.1:{server.server_port}'
 try:
     with TemporaryDirectory(prefix='spain-cities-') as temp, sync_playwright() as pw:
         temp=Path(temp)
-        old=json.loads(subprocess.check_output(['git','show','70650bd:app/data/share.json'],cwd=ROOT))
+        try: old=json.loads(subprocess.check_output(['git','show','70650bd:app/data/share.json'],cwd=ROOT,stderr=subprocess.DEVNULL))
+        except subprocess.CalledProcessError:  # the HUANG repo history is not in SPAIN; fake an older 10/16 pack
+            old=json.loads((ROOT/'app/data/share.json').read_text()); old['version']='2026-10-16-v1'
         old.update(hotels=[{'city':city,'name':name,'dates':'test','address':'Local-only test address','mapUrl':'','note':''} for city,name in [('馬德里','Madrid local hotel'),('塞維亞','Sevilla local hotel'),('格拉納達','Granada local hotel'),('巴塞隆納','Barcelona local hotel')]],tickets=[{'id':'F01','title':'Test flight evidence','date':'2026-12-23','time':'','status':'Test','statusKind':'neutral','note':'Local only','files':[]}],budget={'core':100,'allIn':200})
         current=json.loads((ROOT/'dist/data/share.json').read_text())
         old['flights']=[{**e,'id':'old-'+e['number'],'title':e['number']+' old flight','displayTitle':'Older flight title'} for d in current['days'] for e in d['events'] if e.get('isFlight')]

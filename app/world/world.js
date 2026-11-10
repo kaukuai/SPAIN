@@ -561,7 +561,18 @@ export class TravelWorld {
     }
     this.markRoute();
     this.updateHud();
-    if (this.cardKey) this.openCard(this.cardKey, false);
+    const version = trip.version;
+    if (this.cardKey && version !== this.tripVersion) this.refreshCard();
+    this.tripVersion = version;
+  }
+  // Re-draw the open card (e.g. a wish was stamped) without losing the reading position.
+  refreshCard() {
+    if (!this.ready) return;
+    this.markRoute();
+    if (!this.cardKey) return;
+    const card = this.$('.world-card'), top = card.scrollTop;
+    this.openCard(this.cardKey, false);
+    card.scrollTop = top;
   }
   initialQuestIndex() {
     const now = this.ctx.now(), today = this.ctx.today();
@@ -861,9 +872,11 @@ export class TravelWorld {
     let done = {}; try { done = JSON.parse(localStorage.getItem('spain-quiz') || '{}'); } catch {}
     if (done[key] !== undefined) return;
     done[key] = i; try { localStorage.setItem('spain-quiz', JSON.stringify(done)); } catch {}
+    const top = this.$('.world-card').scrollTop;
     if (i === q.a) { sfx.play('levelup'); for (let k = 0; k < 3; k++) this.coins.got.add(`quiz-${key}-${k}`); try { localStorage.setItem('spain-coins', JSON.stringify([...this.coins.got])); } catch {} this.updateCoins(); this.party.celebrate(); }
     else sfx.play('close');
     this.openCard(key, false);
+    this.$('.world-card').scrollTop = top;
   }
 
   // Photo mode: hide the HUD, render a crisp frame and stamp it like a postcard.

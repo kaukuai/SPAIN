@@ -84,6 +84,9 @@ function optionalStops(day, stops=(day.optionalStops||[]).filter(stop=>!stop.bef
 function anchoredStops(day,event,before) {
   return optionalStops(day,(day.optionalStops||[]).filter(stop=>(before?stop.beforeEventId:stop.afterEventId)===event.id),true);
 }
+const CITY_COLORS=[['馬德','#ffd23f','🏰'],['塞維','#ff9a3c','💃'],['格拉','#e8574a','🕌'],['巴塞','#3fa7ff','🦎'],['台灣','#ff5a5f','🇹🇼'],['上海','#ff5a5f','✈️']];
+const cityColor=text=>(CITY_COLORS.find(([k])=>String(text).includes(k))||[,'#9d70e0'])[1];
+const cityEmoji=text=>(CITY_COLORS.find(([k])=>String(text).includes(k))||[,,'📍'])[2];
 function cityEntry(entry) {
   const e=entry.stop;
   if(entry.kind==='optional')return `<details class="city-stop optional"><summary><span class="city-stop-meta">有空再去・無固定時間</span><strong>${esc(e.displayTitle||e.title)}</strong></summary>${badge(e)}<p class="caption">${esc(e.description||e.note)}</p>${e.openingHours?`<p class="caption">${esc(e.openingHours)}</p>`:''}${activityDetails({activity:{mustTry:e.mustTry||[],tips:e.note?[e.note]:[]}})}${extLink(e.mapUrl,'查看位置 ↗','inline-link')}</details>`;
@@ -91,7 +94,7 @@ function cityEntry(entry) {
 }
 function citySection() {
   const city=cities.find(c=>c.id===state.city);
-  return `<div class="section-heading"><h2>四座城市，一路向東</h2><span>點選查看景點與餐廳</span></div><div class="cities">${cities.map((c,i)=>`<button class="city-tile ${state.city===c.id?'selected':''}" data-action="city" data-city="${c.id}" aria-expanded="${state.city===c.id}" aria-controls="city-overview"><span>0${i+1} / ${c.nights} 晚</span><strong>${c.name}</strong><small>${c.english} ${icon('chevron')}</small></button>`).join('')}</div>
+  return `<div class="section-heading"><h2>四座城市，一路向東</h2><span>點選查看景點與餐廳</span></div><div class="cities">${cities.map((c,i)=>`<button class="city-tile ${state.city===c.id?'selected':''}" style="--c:${cityColor(c.name)}" data-action="city" data-city="${c.id}" aria-expanded="${state.city===c.id}" aria-controls="city-overview"><span>0${i+1} / ${c.nights} 晚</span><i class="city-emoji" aria-hidden="true">${cityEmoji(c.name)}</i><strong>${c.name}</strong><small>${c.english} ${icon('chevron')}</small></button>`).join('')}</div>
   <section id="city-overview" class="city-overview" aria-label="城市景點與餐廳" ${city?'':'hidden'}>${city?`<div class="section-heading"><h2>${city.name}・景點與餐廳</h2><button class="text-button" data-action="city" data-city="${city.id}">收起</button></div><p class="caption">依到訪日期、時間排列；點開可看介紹與推薦。</p>${cityHighlights(data(),city.id).map(day=>`<section class="city-day"><div class="section-heading"><h3>${shortDate(day.date)}</h3><button class="text-button" data-action="day" data-date="${day.date}">當日完整行程 →</button></div>${day.entries.map(cityEntry).join('')}</section>`).join('')}`:''}</section>`;
 }
 function planningReminders() {
@@ -100,14 +103,14 @@ function planningReminders() {
   return `<section class="settings-card planning-reminders"><h2>新增訂位與行前提醒</h2>${reminders.map(reminder=>`<article><h3>${esc(reminder.title)}</h3><p>${esc(reminder.note)}</p>${reminder.calendar?`<button class="file-button" data-action="calendar" data-id="${esc(reminder.id)}">下載訂位提醒</button>`:''}${extLink(reminder.mapUrl,'查看店家位置 ↗','inline-link')}</article>`).join('')}</section>`;
 }
 function header() {
-  return `<header class="header"><a class="wordmark" href="#now" aria-label="西班牙口袋旅程首頁"><span class="brand-mark">ES<span>26</span></span><span>西班牙<span class="brand-sub">口袋旅程</span></span></a><button class="mode-pill" data-action="tab" data-tab="trip">${icon('user')}${privateMode() ? '同行完整版' : '分享行程版'}</button></header>
+  return `<header class="header"><a class="wordmark" href="#world" aria-label="回到冒險地圖"><span class="brand-mark">ES<span>26</span></span><span>西班牙大冒險<span class="brand-sub">HOLYMAN 西班牙團</span></span></a><button class="mode-pill" data-action="tab" data-tab="trip">${icon('user')}${privateMode() ? '同行完整版' : '分享行程版'}</button></header>
   ${state.preview ? `<div class="preview-banner">時間預覽 · ${shortDate(dateInZone(now()))} ${clock(now())} 西班牙 <button data-action="live">回到實際時間</button></div>` : ''}`;
 }
 function navigation() {
   return `<nav class="bottom-nav" aria-label="主要導覽">${[['world','冒險','world'],['now','現在','now'],['plan','行程','plan'],['wish','願望','wish'],['tools','工具','tools'],['tickets','票夾','ticket'],['trip','旅程','trip']].map(([key,label,i]) => `<button data-action="tab" data-tab="${key}" class="nav-item ${state.tab === key ? 'active' : ''}" ${state.tab === key ? 'aria-current="page"' : ''}>${icon(i)}<span>${label}</span></button>`).join('')}</nav>`;
 }
 function dayPicker() {
-  return `<div class="day-picker" aria-label="選擇日期">${data().days.map((d,i) => `<button data-action="day" data-date="${d.date}" class="day-chip ${state.date === d.date ? 'selected' : ''}" aria-pressed="${state.date === d.date}"><small>D${i+1}</small><strong>${shortDate(d.date)}</strong><span>${esc(d.city.split('→')[0])}</span></button>`).join('')}</div>`;
+  return `<div class="day-picker" aria-label="選擇日期">${data().days.map((d,i) => `<button data-action="day" data-date="${d.date}" class="day-chip ${state.date === d.date ? 'selected' : ''}" style="--c:${cityColor(d.city.split('→').pop())}" aria-pressed="${state.date === d.date}"><small>D${i+1}</small><strong>${shortDate(d.date)}</strong><span>${esc(d.city.split('→')[0])}</span></button>`).join('')}</div>`;
 }
 function eventCard(e, label, prominent = false) {
   if (!e) return '';
@@ -121,7 +124,7 @@ function beforeTripHome() {
   const departure = new Date(start.start);
   const departureZone=start.timezone||'Asia/Taipei';
   const daysLeft = Math.max(0, Math.round((Date.parse(dateInZone(departure,departureZone))-Date.parse(dateInZone(now(),departureZone))) / 86400000));
-  return `<section class="hero"><div class="eyebrow">¡HOLA, ESPAÑA! <span>冬日慢遊</span></div><h1>下一站，<br>西班牙<span class="sun-dot"></span></h1><p>從馬德里的聖誕燈飾，走到巴塞隆納的新年。</p><div class="hero-bottom"><div><strong>${daysLeft}</strong><span>天後出發</span></div><span class="trip-stamp">12.23 — 01.04<br><small>西班牙 11 天・4 座城市</small></span></div><div class="arch-art" aria-hidden="true"><i></i><i></i><i></i></div></section>
+  return `<section class="hero"><div class="eyebrow">¡HOLA, ESPAÑA! <span>冬日慢遊</span></div><h1>下一站，<br>西班牙<span class="sun-dot"></span></h1><p>從馬德里的聖誕燈飾，走到巴塞隆納的新年。</p><div class="hero-bottom"><div><strong>${daysLeft}</strong><span>天後出發</span></div><span class="trip-stamp">12.23 — 01.04<br><small>西班牙 11 天・4 座城市</small></span></div><div class="hero-party" aria-hidden="true">${PARTY.map(m=>`<span class="wt-face ${m.id}" style="--skin:${m.skin};--hair:${m.hair}"><i></i><b>${esc(m.name)}</b></span>`).join('')}</div><ol class="hero-route" aria-label="城市路線">${[['馬德里','#ffd23f'],['塞維亞','#ff9a3c'],['格拉納達','#e8574a'],['巴塞隆納','#3fa7ff']].map(([n,c])=>`<li style="--c:${c}">${n}</li>`).join('')}</ol></section>
   <div class="section-heading"><h2>先看看抵達日</h2><span>12/24 · 馬德里</span></div>
   <button class="arrival-card" data-action="day" data-date="${first.date}"><div class="arrival-icon">${icon('pin')}</div><div><strong>市場午餐、聖誕市集</strong><p>寄物後到聖米格爾市場，下午輕鬆逛。</p></div>${icon('chevron')}</button>
   ${privateMode() ? pendingSection() : `<section class="import-prompt"><h3>我們四個人的旅行工具</h3><p>同行者匯入旅行資料包，就能查看票券、住宿與離線地圖。</p><button class="button primary" data-action="import">${icon('download')}匯入同行資料包</button></section>`}
@@ -160,7 +163,7 @@ function itinerary() {
   }).join('')}${optionalStops(day)}</div>`;
 }
 function tickets() {
-  if (!privateMode()) return `<div class="page-heading"><div><p class="eyebrow">YOUR TRAVEL WALLET</p><h1>票券，都放在這裡。</h1></div></div><section class="empty-state"><span class="empty-icon">${icon('ticket')}</span><h2>同行者專屬的票夾</h2><p>匯入同行資料包，票券附件就會儲存在這台手機，離線也能開啟。</p><button class="button primary" data-action="import">匯入同行資料包 ${icon('download')}</button><small>分享網址只會顯示行程版。</small></section>`;
+  if (!privateMode()) return `<div class="page-heading"><div><p class="eyebrow">YOUR TRAVEL WALLET</p><h1>票券，都放在這裡。</h1></div></div><section class="empty-state"><span class="empty-icon">🎫</span><h2>同行者專屬的票夾</h2><p>匯入同行資料包，票券附件就會儲存在這台手機，離線也能開啟。</p><button class="button primary" data-action="import">匯入同行資料包 ${icon('download')}</button><small>分享網址只會顯示行程版。</small></section>`;
   const query=state.search.toLowerCase();
   const ticketReview=data().ticketReview;
   const filtered=data().tickets.filter(t => (state.filter==='all'||(state.filter==='pending'?t.statusKind==='warning':t.statusKind==='confirmed')) && `${t.title} ${t.date} ${t.status} ${t.id}`.toLowerCase().includes(query));
@@ -185,11 +188,36 @@ function journey() {
   ${privateMode()?`<section class="settings-card"><h2>住宿，隨時找得到</h2>${d.hotels.map(h=>`<article class="hotel-row"><span>${esc(h.city)} · ${esc(h.dates)}</span><h3>${esc(h.name)}</h3><p>${esc(h.address)}</p>${extLink(h.mapUrl,'開啟住宿導航 ↗','inline-link')}<details><summary>入住提醒</summary><p>${esc(h.note)}</p></details></article>`).join('')}</section><section class="settings-card"><h2>費用概覽</h2>${d.budget.core===null?'<p>預算待重新核對，請先參考 Excel 的歷史預算頁。</p>':`<div class="budget-number">NT$${money(d.budget.core)}<span>／人</span></div><p>核心規劃預算，含國內航班、不含國際機票。規劃匯率 €1＝NT$40。</p>${d.budget.allIn===null?'':`<p class="caption">含國際機票：NT$${money(d.budget.allIn)}／人。</p>`}`} ${d.budget.note?`<p class="caption">${esc(d.budget.note)}</p>`:''}</section>${pendingSection()}`:''}
   <section class="settings-card"><h2>看看旅途中會怎麼用</h2><p>選一個西班牙當地時間，試看「現在」與「下一步」。</p><div class="preview-presets"><button class="button secondary" data-action="preview" data-time="2026-12-24T11:35:00+01:00">12/24 市場午餐</button><button class="button secondary" data-action="preview" data-time="2026-12-26T21:39:00+01:00">12/26 高鐵抵達</button></div><label class="field-label" for="preview-time">自訂西班牙時間</label><input id="preview-time" type="datetime-local" min="2026-12-23T00:00" max="2027-01-05T23:59" value="2026-12-26T18:15"><button class="text-button" data-action="custom-preview">開啟時間預覽 →</button></section>
   <section class="settings-card"><h2>把旅程分享給親友</h2><p>分享這個網站網址，親友看到的是行程版。票券附件保留在各自匯入資料包的手機上。</p><button class="button secondary" data-action="share">分享行程網址 ${icon('arrow')}</button><p class="caption">請把同行資料包交給同行者；它包含實際票券。</p></section>
-  ${state.privateTrip?'<button class="text-button danger" data-action="clear">移除此裝置的同行資料</button>':''}<footer class="app-footer">西班牙・口袋旅程<br><small>行程依匯入版本顯示，航班、訂位與開放情況仍以現場及供應商確認為準。</small></footer>`;
+  ${state.privateTrip?'<button class="text-button danger" data-action="clear">移除此裝置的同行資料</button>':''}<footer class="app-footer">西班牙大冒險 · holyman 西班牙團<br><small>行程依匯入版本顯示，航班、訂位與開放情況仍以現場及供應商確認為準。</small></footer>`;
+}
+// Re-renders happen on timers, sync and visibility changes; keep what the traveller was
+// doing (expanded details, half-typed forms, focus) instead of resetting the page.
+const uiKey=d=>`${d.closest('[id]')?.id||''}|${d.className}|${d.querySelector('summary')?.textContent.trim()||''}`;
+const fieldKey=el=>`${Object.keys(el.closest('form')?.dataset||{}).join()}|${el.name||el.id}|${['checkbox','radio'].includes(el.type)?el.value:''}`;
+function captureUi() {
+  const root=$('#main'); if(!root||state.tab==='world') return null;
+  const active=document.activeElement&&root.contains(document.activeElement)?document.activeElement:null;
+  return { tab:state.tab, open:[...root.querySelectorAll('details[open]')].map(uiKey),
+    fields:[...root.querySelectorAll('form input,form select,form textarea')].map(el=>[fieldKey(el),['checkbox','radio'].includes(el.type)?el.checked:el.value]),
+    active:active?(active.closest('form')?fieldKey(active):active.id?`#${active.id}`:null):null, sel:active&&'selectionStart'in active?[active.selectionStart,active.selectionEnd]:null };
+}
+function restoreUi(ui) {
+  const root=$('#main'); if(!ui||!root||ui.tab!==state.tab) return;
+  const open=new Set(ui.open);
+  for(const d of root.querySelectorAll('details')) if(open.has(uiKey(d))) d.open=true;
+  const values=new Map(ui.fields);
+  for(const el of root.querySelectorAll('form input,form select,form textarea')){const k=fieldKey(el);if(!values.has(k))continue;const v=values.get(k);if(['checkbox','radio'].includes(el.type))el.checked=v;else el.value=v;}
+  if(ui.active){const el=ui.active.startsWith('#')?document.getElementById(ui.active.slice(1)):[...root.querySelectorAll('form input,form select,form textarea')].find(x=>fieldKey(x)===ui.active);if(el){el.focus({preventScroll:true});try{if(ui.sel)el.setSelectionRange(...ui.sel);}catch{}}}
 }
 function render() {
   if (!data()) return;
+  // The 3D world keeps its own state; only the navigation needs refreshing.
+  if (state.tab==='world' && world?.root?.isConnected && $('#world-slot')?.contains(world.root)) {
+    const nav=document.createElement('div');nav.innerHTML=navigation();$('.bottom-nav')?.replaceWith(nav.firstElementChild);
+    world.refresh();return;
+  }
   const scroll = window.scrollY;
+  const ui=captureUi();
   const updateBanner=data().hasNewerItinerary?'<div class="data-update-banner">已顯示最新行程；同行附件可另匯入新版。<button data-action="tab" data-tab="trip">查看更新</button></div>':'';
   document.body.classList.toggle('is-world',state.tab==='world');
   if (state.tab==='world') $('#app').innerHTML = `<main id="main" class="world-main" tabindex="-1"><h1 class="sr-only">西班牙冒險地圖</h1><div id="world-slot" class="world-slot"></div></main>${navigation()}`;
@@ -200,12 +228,13 @@ function render() {
     dayMap.mount($('#daily-map-slot'),selectedDay());
   } else dayMap?.detach();
   if (state.tab==='plan') $('.day-chip.selected')?.scrollIntoView({block:'nearest',inline:'center'});
+  restoreUi(ui);
   window.scrollTo(0,scroll);
 }
 const teamSync=new TeamSync({
   getState:()=>({wish:state.wish.state,tools:state.tools}),
-  onChange:async()=>{await saveWishes();await saveTools();if(state.tab!=='world')render();world?.refresh();},
-  onStatus:()=>{const el=$('#sync-status');if(el)el.textContent=syncStatusText();},
+  onChange:async()=>{await saveWishes();await saveTools();render();world?.refreshCard();},
+  onStatus:()=>{const el=$('#team-sync-status');if(el)el.textContent=syncStatusText();},
 });
 function syncStatusText() {
   if(!teamSync.enabled)return '尚未連線，資料只存在這支手機。';
@@ -216,19 +245,19 @@ function syncStatusText() {
 function syncCard() {
   const who=teamSync.who;
   return teamSync.enabled
-    ?`<section class="settings-card sync-card"><h2>👥 團隊同步${teamSync.status==='ok'?'：已連線':''}</h2><p>蓋章、投票、自己新增的願望和分帳紀錄，會自動同步給 holyman、勳、ㄓㄒ、33。</p><p class="sync-status" id="sync-status">${esc(syncStatusText())}</p>
+    ?`<section class="settings-card sync-card"><h2>👥 團隊同步${teamSync.status==='ok'?'：已連線':''}</h2><p>蓋章、投票、自己新增的願望和分帳紀錄，會自動同步給 holyman、勳、ㄓㄒ、33。</p><p class="sync-status" id="team-sync-status">${esc(syncStatusText())}</p>
       <label class="field-label">我是誰（之後可顯示誰蓋的章）<select data-sync-who><option value="">未選擇</option>${PARTY.map(m=>`<option value="${m.id}" ${who===m.id?'selected':''}>${esc(m.name)}</option>`).join('')}</select></label>
       <div class="actions"><button class="button primary" data-action="sync-now">立即同步</button><button class="button secondary" data-action="wish-export">複製我新增的願望</button><button class="button secondary" data-action="sync-off">在這支手機停用同步</button></div></section>`
     :`<section class="settings-card sync-card"><h2>👥 團隊同步</h2><p>輸入團隊通關碼後，四個人的蓋章、投票、自己新增的願望和分帳就會共用。只看行程的朋友不需要輸入。</p>
-      <form data-sync-form class="sync-form"><input name="code" type="password" autocomplete="off" required placeholder="團隊通關碼"><button class="button primary" type="submit">連線</button></form><p class="sync-status" id="sync-status">${esc(syncStatusText())}</p>
+      <form data-sync-form class="sync-form"><input name="code" type="password" autocomplete="off" required placeholder="團隊通關碼"><button class="button primary" type="submit">連線</button></form><p class="sync-status" id="team-sync-status">${esc(syncStatusText())}</p>
       <div class="actions"><button class="button secondary" data-action="wish-export">複製我新增的願望</button><button class="button secondary" data-action="wish-reset">重設這台裝置的進度</button></div></section>`;
 }
 function tools() { if(state.tools.tab==='weather') loadToolWeather(); return toolsPage(state.tools,state.toolsLive)+(state.tools.tab==='split'?syncCard():''); }
 function saveTools() { return saveSetting('toolsState',state.tools).catch(()=>{}); }
 async function loadToolWeather() {
-  if(state.toolsLive.weatherLoading||state.toolsLive.weather) return;
+  if(state.toolsLive.weatherLoading||state.toolsLive.weather||Date.now()-(state.toolsLive.weatherFailedAt||0)<60000) return;
   state.toolsLive.weatherLoading=true;
-  try { state.toolsLive.weather=await fetchToolWeather(dateInZone(now())); } catch {} finally { state.toolsLive.weatherLoading=false; }
+  try { state.toolsLive.weather=await fetchToolWeather(dateInZone(now())); } catch { state.toolsLive.weatherFailedAt=Date.now(); } finally { state.toolsLive.weatherLoading=false; }
   if(state.tab==='tools'&&state.toolsLive.weather) render();
 }
 function wishItems() { return allWishes(state.wish.base,state.wish.state); }
@@ -294,7 +323,7 @@ async function toggleWish(id, button) {
     toast(after.level>before?`🎉 升級！旅行團 Lv.${after.level}「${after.title}」`:`🏵️ 蓋章完成：${item.title}　+${item.points||10} XP`);
     if(after.level>before) setTimeout(()=>sfx.play('levelup'),400);
   }
-  await saveWishes(); render();
+  await saveWishes(); render(); world?.refreshCard();
   if(!st.done[id]) return;
   requestAnimationFrame(()=>document.querySelectorAll(`[data-action="wish-toggle"][data-id="${CSS.escape(id)}"]`).forEach(b=>b.closest('.wish')?.classList.add('just-done')));
 }
@@ -376,7 +405,7 @@ async function action(button) {
     const text=mine.map(({custom,...i})=>JSON.stringify(i)).join(',\n');
     try{await navigator.clipboard.writeText(text);toast(`已複製 ${mine.length} 個願望，貼進 wishlist.json 的 items 即可共享`);}catch{prompt('複製以下內容：',text);}
   }
-  else if (a==='wish-reset') {if(!confirm('要清除這台裝置的蓋章、投票與自己新增的願望嗎？'))return;state.wish.state=emptyWishState();teamSync.meta={};teamSync.saveMeta();await saveWishes();render();toast('已重設願望進度');}
+  else if (a==='wish-reset') {if(!confirm(teamSync.enabled?'要清除這台裝置的願望進度嗎？已連線團隊同步，下次同步會從團員資料重新載回。':'要清除這台裝置的蓋章、投票與自己新增的願望嗎？'))return;state.wish.state=emptyWishState();teamSync.meta={};teamSync.saveMeta();await saveWishes();render();toast('已重設願望進度');}
   else if (a==='share') {
     const url=new URL('./',location.href).href;
     if (/^(localhost|127\.0\.0\.1)$/.test(location.hostname)) return toast('目前是本機預覽；正式上線後即可分享手機網址。');
@@ -427,6 +456,7 @@ async function fetchFresh(path) {
 async function refreshPublicData(manual=false) {
   if(state.syncing||state.busy)return;
   state.syncing=true;
+  const before=`${state.share?.version}|${data()?.version}|${state.date}`;
   if(manual){state.syncMessage='正在檢查網站最新行程…';render();}
   try {
     const response=await fetchFresh('./data/share.json');
@@ -446,14 +476,15 @@ async function refreshPublicData(manual=false) {
     if(manual)toast(state.syncMessage);
     return true;
   }catch(error){state.syncMessage='目前無法取得網站更新，繼續使用已儲存行程。';if(manual)toast(state.syncMessage);return false;}
-  finally{state.syncing=false;if(data())render();}
+  finally{state.syncing=false;if(data()&&(manual||state.tab==='trip'||before!==`${state.share?.version}|${data()?.version}|${state.date}`))render();}
 }
 if('serviceWorker'in navigator)navigator.serviceWorker.addEventListener('message',event=>{
   if(event.data?.type!=='APP_VERSION')return;
   event.source?.postMessage({type:'CLIENT_VERSION',build:APP_BUILD});
   if(event.data.build===APP_BUILD)return;
   state.shellUpdate=true;
-  if(!state.busy&&!$('#viewer').open)location.reload();else if(data())render();
+  const typing=document.activeElement?.matches?.('input,textarea,select');
+  if(!state.busy&&!$('#viewer').open&&!typing&&state.tab!=='world')location.reload();else{if(data()&&state.tab!=='world')render();toast('新版畫面已下載，到「旅程」頁按「開啟新版畫面」即可更新');}
 });
 async function boot() {
   try {
