@@ -81,7 +81,7 @@
 | Output Directory | `dist` |
 | Install Command | `npm ci --ignore-scripts --no-audit --no-fund` |
 
-第一次部署後，Vercel 會提供 HTTPS 網址；之後 main 分支每次推送都會重新部署。四位同行者各自開啟網址、匯入同行資料包，再加入手機主畫面。給親友時分享同一個網址即可。
+第一次部署後，Vercel 會提供 HTTPS 網址；之後 main 分支每次推送都會重新部署。Claude 在工作分支（`claude/...`）完成的修改會同時推送到 `main`；`Publish to main` GitHub Action 也會在測試與建置通過後自動把工作分支快轉合併到 `main`，所以同一個網址會自動更新，不需要到 Vercel 手動升級版本。四位同行者各自開啟網址、匯入同行資料包，再加入手機主畫面。給親友時分享同一個網址即可。
 
 公開行程資料已存於 `app/data/share.json`，因此 Vercel 建置只需 Node，無須 Python、Excel、雲端環境路徑或私人票券。
 
