@@ -5,7 +5,7 @@ import { worldLayout, BLOCKS, CITY_ORDER, doorPoint, souvenirKey, blockAt, portP
 import { CITIES, DECOR, ROUTES, MAP_RIVERS, MAP_MOUNTAINS, mapXY, project, scaleAt, pointInPolygon } from './geo.js';
 import { SPAIN_BORDER, PROVINCES } from './spain-map.js';
 import { C, planeModel, trainModel, busModel, tree } from './models.js';
-import { Party, PARTY, setPartyGradient } from './party.js';
+import { Party, PARTY, HATS, setPartyGradient } from './party.js';
 import { DioramaCamera } from './controls.js';
 import { sfx, music } from './sfx.js';
 import { buildCity } from './city-builder.js';
@@ -58,18 +58,20 @@ export class TravelWorld {
           <button class="wbtn round" data-w="music" aria-label="背景音樂"></button>
           <button class="wbtn round" data-w="night" aria-label="白天／夜晚"></button>
           <button class="wbtn round" data-w="photo" aria-label="拍紀念照">📷</button>
+          <button class="wbtn round" data-w="wardrobe" aria-label="團隊衣櫃">👒</button>
           <button class="wbtn round" data-w="party" aria-label="回到隊伍">⌖</button>
           <button class="wbtn round" data-w="overview" aria-label="看全地圖">🗺️</button>
         </div>
       </header>
       <nav class="world-cities" aria-label="城市"></nav>
-      <div class="world-status"><span class="ws-coins" title="收集的金幣">🪙 0</span><span class="ws-weather" hidden></span></div>
+      <div class="world-status"><span class="ws-coins" data-w="wardrobe" role="button" title="收集的金幣">🪙 0</span><span class="ws-weather" hidden></span></div>
       <section class="world-quest" aria-live="polite"></section>
       <div class="world-ride" hidden></div>
       <div class="world-banner" hidden></div>
       <div class="world-stamp" hidden></div>
       <aside class="world-card" hidden aria-live="polite"></aside>
       <div class="world-photo" hidden></div>
+      <div class="world-wardrobe" hidden></div>
       <div class="world-title" hidden></div>
       <div class="world-loading"><div class="world-spinner"></div><p>正在搭建西班牙小鎮…</p></div>`;
     this.$ = s => this.root.querySelector(s);
@@ -108,6 +110,8 @@ export class TravelWorld {
     if (!shown) this.showTitle(); else this.controls.flyTo(this.party.position.x, this.party.position.z, 70);
     this.loadWeather();
     if (music.on) music.set(true);
+    this.party.setHat(this.wardrobe().hat);
+    if (this.pendingFocus) { const k = this.pendingFocus; this.pendingFocus = null; this.$('.world-title').hidden = true; setTimeout(() => this.goToPlace(k), 400); }
   }
 
   // ---------------------------------------------------------------- scene
@@ -182,6 +186,7 @@ export class TravelWorld {
     const fw = this.layout.byKey.get('barcelona|MNAC') || this.layout.byKey.get('barcelona|Plaça d’Espanya');
     if (fw) this.fireworks.at = { x: fw.x, z: fw.z };
     this.coins = new Coins(scene, this.coinSpots());
+    this.buildEffects();
 
     const xs = [-200, 340], zs = [-160, 200];
     this.controls = new DioramaCamera(this.camera, canvas, {
@@ -470,6 +475,7 @@ export class TravelWorld {
     this.precip.update(dt, t, tg);
     this.fireworks.update(dt);
     this.coins.update(dt, t, this.party.group.visible ? this.party.position : null, c => this.collectCoin(c));
+    this.updateEffects(dt, t);
     this.watchRegion();
     this.renderer.render(this.scene, this.camera);
     this.updateLabels();
@@ -532,7 +538,7 @@ export class TravelWorld {
     this.updateCoins();
     if (this.coins.mapCount === this.coins.total) this.ctx.toast?.('🏆 全部金幣收集完成！你們是真正的探險家！');
   }
-  updateCoins() { this.$('.ws-coins').textContent = `🪙 ${this.coins.count}`; this.$('.ws-coins').title = `地圖金幣 ${this.coins.mapCount}/${this.coins.total}，問答也能賺金幣`; }
+  updateCoins() { this.$('.ws-coins').textContent = `🪙 ${this.balance()}`; this.$('.ws-coins').title = `地圖金幣 ${this.coins.mapCount}/${this.coins.total}，問答也能賺金幣`; }
   async loadWeather() {
     this.weather = await fetchWeather({ madrid: CITIES.madrid.center, sevilla: CITIES.sevilla.center, granada: CITIES.granada.center, barcelona: CITIES.barcelona.center });
     this.updateWeatherChip();
@@ -611,6 +617,10 @@ export class TravelWorld {
       const stars = this.ctx.wishCount?.(L.it.key) || 0;
       L.star = stars > 0; L.el.classList.toggle('star', stars > 0);
     }
+    if (this.starMesh) {
+      this.starPos = this.labels.filter(L => !L.city && L.star && !L.it.souvenir).slice(0, 160).map(L => ({ x: L.it.x, y: (L.it.y || 0) + (L.it.h || 6) + 2.6, z: L.it.z }));
+      this.starMesh.count = this.starPos.length;
+    }
     const target = this.stops[this.questIndex];
     this.markerItem = target ? this.layout.byKey.get(target.key) : null;
     // marching dots between consecutive fixed stops on the same island
@@ -636,7 +646,7 @@ export class TravelWorld {
     this.$('.world-day-label strong').textContent = this.day.city;
     this.$('[data-w="prev"]').disabled = idx <= 0; this.$('[data-w="next"]').disabled = idx >= trip.days.length - 1;
     const q = this.$('.world-quest');
-    if (!this.stops.length) { q.innerHTML = `<div class="wq-head"><span class="wq-badge">今日任務</span></div><strong class="wq-title">${esc(this.day.title)}</strong><p class="wq-sub">今天以交通移動為主，點地圖上的建築看看介紹吧！</p>`; return; }
+    if (!this.stops.length) { q.innerHTML = `<div class="wq-head"><span class="wq-badge">今日任務</span></div><strong class="wq-title">${esc(this.day.title)}</strong>${this.challengeHtml()}<p class="wq-sub">今天以交通移動為主，點地圖上的建築看看介紹吧！</p>`; return; }
     const s = this.stops[this.questIndex] || this.stops[0];
     const fixedTotal = this.stops.length, done = this.stops.filter(x => this.visited.has(x.key)).length;
     q.classList.toggle('collapsed', !!this.questCollapsed);
@@ -645,6 +655,7 @@ export class TravelWorld {
       <strong class="wq-title"><span class="wq-num ${s.optional ? 'opt' : ''}">${esc(s.label)}</span>${esc(this.names.get(s.key)?.zh || s.title)}</strong>
       <p class="wq-sub">${esc(this.day.title)}</p>
       <div class="wq-pips">${this.stops.map((x, i) => `<button class="wq-pip ${i === this.questIndex ? 'now' : ''} ${this.visited.has(x.key) ? 'done' : ''} ${x.optional ? 'opt' : ''}" data-w="pip" data-i="${i}" aria-label="${esc(x.title)}">${esc(x.label)}</button>`).join('')}</div>
+      ${this.challengeHtml()}
       <div class="wq-actions"><button class="wbtn go" data-w="go">${this.visited.has(s.key) ? '再去一次' : '出發！'}</button><button class="wbtn" data-w="info">看介紹</button><button class="wbtn" data-w="qnext">下一站 ▶</button></div>`;
   }
   updateTools() {
@@ -663,12 +674,128 @@ export class TravelWorld {
     const p = PALETTES[mode];
     this.root.style.setProperty('--sky1', p.sky[0]); this.root.style.setProperty('--sky2', p.sky[1]);
     this.root.dataset.time = mode;
-    this.sea.material.color.set(p.sea);
-    this.hemi.color.set(p.hemi[0]); this.hemi.groundColor.set(p.hemi[1]); this.hemi.intensity = p.hemi[2];
-    this.sun.color.set(p.sun[0]); this.sun.intensity = p.sun[1];
-    this.mats.light.color.setScalar(p.light);
-    this.scene.fog.color.set(p.fog);
+    // Colours glide to the new time of day instead of snapping.
+    this.paletteTarget = { sea: new THREE.Color(p.sea), hemi: new THREE.Color(p.hemi[0]), ground: new THREE.Color(p.hemi[1]), hemiI: p.hemi[2], sun: new THREE.Color(p.sun[0]), sunI: p.sun[1], light: p.light, fog: new THREE.Color(p.fog) };
+    if (!this.paletteInit) { this.paletteInit = true; this.blendPalette(1); }
+    this.mode = mode;
     this.fireworks.active = mode === 'night' && ['2026-12-31', '2027-01-01'].includes(this.date);
+  }
+
+  blendPalette(k) {
+    const p = this.paletteTarget; if (!p) return;
+    this.sea.material.color.lerp(p.sea, k);
+    this.hemi.color.lerp(p.hemi, k); this.hemi.groundColor.lerp(p.ground, k); this.hemi.intensity += (p.hemiI - this.hemi.intensity) * k;
+    this.sun.color.lerp(p.sun, k); this.sun.intensity += (p.sunI - this.sun.intensity) * k;
+    const l = this.mats.light.color.r + (p.light - this.mats.light.color.r) * k; this.mats.light.color.setScalar(l);
+    this.scene.fog.color.lerp(p.fog, k);
+  }
+
+  // ---------------------------------------------------------------- effects & small game systems
+  buildEffects() {
+    // floating gold stars over places that still have open wishes
+    const star = new THREE.Shape();
+    for (let i = 0; i < 10; i++) { const r = i % 2 ? .45 : 1, a = i / 10 * Math.PI * 2 - Math.PI / 2; i ? star.lineTo(Math.cos(a) * r, Math.sin(a) * r) : star.moveTo(Math.cos(a) * r, Math.sin(a) * r); }
+    const sg = new THREE.ExtrudeGeometry(star, { depth: .3, bevelEnabled: true, bevelSize: .08, bevelThickness: .08, bevelSegments: 1 }); sg.center();
+    this.starMesh = new THREE.InstancedMesh(sg, new THREE.MeshToonMaterial({ color: '#ffd23f', emissive: '#7a5600', gradientMap: this.gradient }), 160);
+    this.starMesh.count = 0; this.starMesh.frustumCulled = false; this.starPos = [];
+    this.scene.add(this.starMesh);
+    // ripples where you tap, sparkles when the team arrives
+    this.ripples = [0, 1, 2].map(() => { const m = new THREE.Mesh(new THREE.TorusGeometry(1, .09, 6, 32), new THREE.MeshBasicMaterial({ color: '#ffffff', transparent: true })); m.rotation.x = Math.PI / 2; m.visible = false; m.userData.t = 9; this.scene.add(m); return m; });
+    const n = 28, dir = new Float32Array(n * 3);
+    for (let i = 0; i < n; i++) { const a = Math.random() * Math.PI * 2, up = .4 + Math.random() * .8; dir.set([Math.cos(a) * (1 - up * .4), up, Math.sin(a) * (1 - up * .4)], i * 3); }
+    this.burstDir = dir;
+    this.bursts = [0, 1].map(() => { const g = new THREE.BufferGeometry(); g.setAttribute('position', new THREE.BufferAttribute(new Float32Array(n * 3), 3)); const pts = new THREE.Points(g, new THREE.PointsMaterial({ color: '#ffe36b', size: .55, transparent: true, depthWrite: false })); pts.visible = false; pts.frustumCulled = false; pts.userData.t = 9; this.scene.add(pts); return pts; });
+    // twinkling sun glints on the sea
+    const glint = new THREE.PlaneGeometry(.9, .9); glint.rotateX(-Math.PI / 2); glint.rotateY(Math.PI / 4);
+    this.glints = new THREE.InstancedMesh(glint, new THREE.MeshBasicMaterial({ color: '#ffffff', transparent: true, opacity: .85, depthWrite: false }), 260);
+    const R = rng('glints'); this.glintPos = Array.from({ length: 260 }, () => ({ x: -260 + R() * 640, z: -220 + R() * 470, p: R() * 6.28, s: .6 + R() * .9 }));
+    this.glints.frustumCulled = false; this.scene.add(this.glints);
+  }
+  updateEffects(dt, t) {
+    const m = new THREE.Matrix4(), q = new THREE.Quaternion(), sc = new THREE.Vector3(), pos = new THREE.Vector3(), e = new THREE.Euler();
+    for (let i = 0; i < this.starMesh.count; i++) {
+      const p = this.starPos[i], k = .72 + Math.sin(t * 3 + i) * .06;
+      e.set(0, t * 1.6 + i, 0); q.setFromEuler(e); pos.set(p.x, p.y + Math.sin(t * 2.2 + i) * .35, p.z); sc.set(k, k, k);
+      this.starMesh.setMatrixAt(i, m.compose(pos, q, sc));
+    }
+    if (this.starMesh.count) this.starMesh.instanceMatrix.needsUpdate = true;
+    for (const r of this.ripples) { if (r.userData.t > .7) { r.visible = false; continue; } r.userData.t += dt; const k = .6 + r.userData.t * 3.4; r.scale.set(k, k, k); r.material.opacity = 1 - r.userData.t / .7; }
+    for (const b of this.bursts) {
+      if (b.userData.t > .9) { b.visible = false; continue; }
+      b.userData.t += dt; const tt = b.userData.t, a = b.geometry.attributes.position.array, d = this.burstDir;
+      for (let i = 0; i < a.length; i += 3) { a[i] = d[i] * tt * 5; a[i + 1] = d[i + 1] * tt * 6 - tt * tt * 5; a[i + 2] = d[i + 2] * tt * 5; }
+      b.geometry.attributes.position.needsUpdate = true; b.material.opacity = 1 - tt / .9;
+    }
+    const night = this.mode === 'night';
+    this.glints.visible = this.controls.dist < 420;
+    if (this.glints.visible) {
+      for (let i = 0; i < this.glintPos.length; i++) { const g = this.glintPos[i], k = Math.max(0, Math.sin(t * 2.4 + g.p)) * g.s * (night ? .5 : 1); pos.set(g.x, -2.57, g.z); q.identity(); sc.set(k, 1, k); this.glints.setMatrixAt(i, m.compose(pos, q, sc)); }
+      this.glints.instanceMatrix.needsUpdate = true;
+    }
+    if (this.paletteTarget) this.blendPalette(1 - Math.exp(-dt * 2.5));
+  }
+  ripple(x, z) { const r = this.ripples.reduce((a, b) => (a.userData.t > b.userData.t ? a : b)); r.userData.t = 0; r.visible = true; r.position.set(x, this.heightAt(x, z) + .12, z); }
+  sparkle(x, y, z) { const b = this.bursts.reduce((a, c) => (a.userData.t > c.userData.t ? a : c)); b.userData.t = 0; b.visible = true; b.position.set(x, y + .8, z); }
+
+  wardrobe() {
+    let w = {}; try { w = JSON.parse(localStorage.getItem('spain-wardrobe') || '{}'); } catch {}
+    return { owned: ['santa'], hat: '', spent: 0, ...w };
+  }
+  saveWardrobe(w) { try { localStorage.setItem('spain-wardrobe', JSON.stringify(w)); } catch {} }
+  balance() { return this.coins.count - this.wardrobe().spent; }
+  openWardrobe() {
+    const w = this.wardrobe(), el = this.$('.world-wardrobe');
+    el.innerHTML = `<div class="ww-inner"><header><div><small>TEAM WARDROBE</small><h2>👒 團隊衣櫃</h2></div><button class="wbtn round" data-w="wardrobe-close" aria-label="關閉">✕</button></header>
+      <p class="ww-coins">🪙 可用金幣 <b>${this.balance()}</b><small>撿地圖金幣、答對地標問答、完成今日 🌟 挑戰都能賺金幣</small></p>
+      <div class="ww-grid">${[['', '不戴帽子', '🙂', 0], ...Object.entries(HATS).map(([k, h]) => [k, h.name, h.icon, h.price])].map(([k, name, icon, price]) => {
+        const owned = !k || w.owned.includes(k), on = w.hat === k;
+        return `<button class="ww-item ${on ? 'on' : ''}" data-w="hat" data-hat="${k}"><span>${icon}</span><b>${esc(name)}</b><small>${on ? '已穿上' : owned ? '穿上' : `🪙 ${price}`}</small></button>`;
+      }).join('')}</div><p class="caption">四位團員會一起換上同一頂帽子；金幣紀錄存在這支手機。</p></div>`;
+    el.hidden = false;
+  }
+  chooseHat(kind) {
+    const w = this.wardrobe(), hat = HATS[kind];
+    if (kind && !w.owned.includes(kind)) {
+      if (this.balance() < hat.price) { sfx.play('close'); this.ctx.toast?.(`金幣不夠，還差 ${hat.price - this.balance()} 枚，去地圖上撿金幣吧！`); return; }
+      w.owned.push(kind); w.spent += hat.price; sfx.play('coin');
+    }
+    w.hat = kind; this.saveWardrobe(w);
+    this.party.setHat(kind); this.party.celebrate(); sfx.play('levelup');
+    this.updateCoins(); this.openWardrobe();
+  }
+
+  // Three open wishes in today's city, fixed for the day; finishing all three pays a bonus.
+  challenge() {
+    const city = this.ctx.cityOf?.(this.day); if (!city || !this.ctx.dailyWishes) return null;
+    let store = {}; try { store = JSON.parse(localStorage.getItem('spain-challenge') || '{}'); } catch {}
+    const key = `${this.day.date}|${city}`;
+    if (!store[key]?.length) {
+      const picks = this.ctx.dailyWishes(this.day.date, city);
+      if (!picks.length) return null;
+      store[key] = picks.map(i => ({ id: i.id, emoji: i.emoji, title: i.title, place: i.place || '' }));
+      try { localStorage.setItem('spain-challenge', JSON.stringify(store)); } catch {}
+    }
+    return { key, list: store[key] };
+  }
+  challengeHtml() {
+    const c = this.challenge(); if (!c) return '';
+    const done = c.list.filter(i => this.ctx.wishDone(i.id)).length;
+    return `<div class="wq-wishes"><span class="wq-wish-head">🌟 今日挑戰 ${done}/${c.list.length}${done === c.list.length ? ' 🎉' : ' · 全完成 +5🪙'}</span>${c.list.map(i => `<button class="wq-wish ${this.ctx.wishDone(i.id) ? 'done' : ''}" data-w="wish" data-id="${esc(i.id)}" title="${esc(i.title)}"><span>${esc(i.emoji)}</span>${esc(i.title)}</button>`).join('')}</div>`;
+  }
+  async completeChallengeWish(id) {
+    await this.ctx.toggleWish(id);
+    const c = this.challenge();
+    if (c && c.list.every(i => this.ctx.wishDone(i.id)) && !this.coins.got.has(`challenge-${c.key}-0`)) {
+      for (let k = 0; k < 5; k++) this.coins.got.add(`challenge-${c.key}-${k}`);
+      try { localStorage.setItem('spain-coins', JSON.stringify([...this.coins.got])); } catch {}
+      this.updateCoins(); this.party.celebrate(); sfx.play('levelup'); this.sparkle(this.party.position.x, this.party.position.y, this.party.position.z);
+      this.ctx.toast?.('🎉 今日挑戰全部完成！獲得 5 枚金幣');
+    }
+    this.updateHud();
+  }
+  focusPlace(key) {
+    if (!this.ready) { this.pendingFocus = key; try { sessionStorage.setItem('spain-title', '1'); } catch {} return; }
+    this.goToPlace(key);
   }
 
   // ---------------------------------------------------------------- interaction
@@ -688,6 +815,10 @@ export class TravelWorld {
     else if (w === 'photo-close') { this.$('.world-photo').hidden = true; this.root.classList.remove('photo-mode'); }
     else if (w === 'photo-share') this.sharePhoto();
     else if (w === 'quiz') this.answerQuiz(btn.dataset.key, +btn.dataset.i);
+    else if (w === 'wardrobe') { sfx.play('select'); this.openWardrobe(); }
+    else if (w === 'wardrobe-close') this.$('.world-wardrobe').hidden = true;
+    else if (w === 'hat') this.chooseHat(btn.dataset.hat);
+    else if (w === 'wish') this.completeChallengeWish(btn.dataset.id);
     else if (w === 'city') this.flyCity(btn.dataset.city);
     else if (w === 'pip') { this.questIndex = +btn.dataset.i; sfx.play('tap'); this.markRoute(); this.updateHud(); const it = this.markerItem; if (it) this.controls.flyTo(it.x, it.z, Math.min(this.controls.goalDist, 60)); }
     else if (w === 'go') { const s = this.stops[this.questIndex]; if (s) { sfx.play('go'); this.goToPlace(s.key); } }
@@ -716,7 +847,7 @@ export class TravelWorld {
     if (tt > 0) {
       const p = ray.origin.clone().addScaledVector(ray.direction, tt);
       const blk = blockAt(p.x, p.z, 1.5);
-      if (blk) { sfx.play('tap'); this.closeCard(); this.travel(blk.id, { x: p.x, z: p.z }); }
+      if (blk) { sfx.play('tap'); this.ripple(p.x, p.z); this.closeCard(); this.travel(blk.id, { x: p.x, z: p.z }); }
     }
   }
   talk(member) {
@@ -741,6 +872,7 @@ export class TravelWorld {
     if (!ok) return;
     this.party.leader.facing = Math.PI; this.party.members.forEach(m => { m.facing = Math.PI; });
     this.party.celebrate(); sfx.play('arrive'); navigator.vibrate?.(20);
+    this.sparkle(this.party.position.x, this.party.position.y, this.party.position.z);
     const cat = this.names.get(key)?.category || '', kind = item.transport ? 'transport' : item.souvenir ? 'shop' : /餐|甜點|酒|早|午|晚|採買/.test(cat) ? 'dining' : 'sight';
     const lines = ARRIVE_LINES[kind], who = kind === 'dining' ? this.party.members[2] : kind === 'shop' ? this.party.members[3] : kind === 'sight' ? this.party.members[1] : this.party.leader;
     this.say(who, lines[Math.floor(Math.random() * lines.length)], 2600);

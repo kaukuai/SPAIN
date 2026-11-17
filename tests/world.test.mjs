@@ -72,3 +72,26 @@ test('wishlist scoring, levels, badges and gacha', () => {
   assert.ok(wishesForPlace(merged, 'barcelona|souvenir').every(i => i.type === 'buy'));
   assert.throws(() => makeCustom({ title: '  ' }));
 });
+
+test('holyman 100-item list is complete, numbered and filterable', async () => {
+  const { filterWishes, dailyPicks, inCity, CATEGORIES } = await import('../app/wishlist.js');
+  const state = emptyWishState();
+  const items = allWishes(wishData, state);
+  const numbered = items.filter(i => i.no).sort((a, b) => a.no - b.no);
+  assert.equal(numbered.length, 100);
+  assert.deepEqual(numbered.map(i => i.no), Array.from({ length: 100 }, (_, i) => i + 1));
+  for (const i of items) assert.ok(i.cities.length >= 1 && i.cities.every(c => ['madrid', 'sevilla', 'granada', 'barcelona'].includes(c)), i.id);
+  // overlapping old recommendations keep their ids so stamps survive
+  for (const id of ['mad-chocolate', 'bcn-grapes', 'svq-flamenco', 'buy-violetas']) assert.ok(numbered.some(i => i.id === id), id);
+  const zara = filterWishes(items, state, { q: 'zara' });
+  assert.ok(zara.some(i => i.no === 4) && zara.some(i => i.no === 45));
+  const bcnFood = filterWishes(items, state, { city: 'barcelona', cat: '美食' });
+  assert.ok(bcnFood.length > 5 && bcnFood.every(i => inCity(i, 'barcelona') && i.tags.includes('美食')));
+  assert.ok(filterWishes(items, state, { cat: '伴手禮' }).every(i => i.type === 'buy'));
+  assert.ok(CATEGORIES.length > 5);
+  const picks = dailyPicks(items, state, 'granada', '2026-12-28');
+  assert.equal(picks.length, 3);
+  assert.deepEqual(picks, dailyPicks(items, state, 'granada', '2026-12-28'), 'daily picks are stable for the same day');
+  state.done[picks[0].id] = 1;
+  assert.ok(!dailyPicks(items, state, 'granada', '2026-12-28').some(i => i.id === picks[0].id));
+});

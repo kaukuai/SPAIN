@@ -10,6 +10,32 @@ const mat = color => {
   if (!matCache.has(color)) matCache.set(color, new THREE.MeshToonMaterial({ color, gradientMap: gradient }));
   return matCache.get(color);
 };
+export const HATS = {
+  santa: { name: '聖誕帽', icon: '🎅', price: 0, build(g) {
+    g.add(part(new THREE.ConeGeometry(.3, .5, 14), '#e53935', { y: .52, z: -.04, rx: -.35, outline: true }));
+    g.add(part(new THREE.TorusGeometry(.33, .07, 8, 18), '#ffffff', { y: .32, rx: Math.PI / 2 }));
+    g.add(part(sphereGeo, '#ffffff', { y: .76, z: -.2, sx: .09, sy: .09, sz: .09 }));
+  } },
+  beret: { name: '貝雷帽', icon: '🎨', price: 8, build(g) {
+    g.add(part(sphereGeo, '#2b3a67', { y: .37, x: .05, sx: .44, sy: .13, sz: .44, rz: .18, outline: true }));
+    g.add(part(cylGeo, '#2b3a67', { y: .5, x: .08, sx: .03, sy: .07, sz: .03 }));
+  } },
+  straw: { name: '草帽', icon: '👒', price: 12, build(g) {
+    g.add(part(cylGeo, '#f2cf7a', { y: .3, sx: .66, sy: .035, sz: .66, outline: true }));
+    g.add(part(cylGeo, '#f2cf7a', { y: .4, sx: .32, sy: .2, sz: .32 }));
+    g.add(part(cylGeo, '#e53935', { y: .34, sx: .33, sy: .05, sz: .33 }));
+  } },
+  cordobes: { name: '安達魯西亞寬簷帽', icon: '🎩', price: 18, build(g) {
+    g.add(part(cylGeo, '#2b2433', { y: .31, sx: .62, sy: .035, sz: .62, outline: true }));
+    g.add(part(cylGeo, '#2b2433', { y: .42, sx: .3, sy: .22, sz: .3 }));
+    g.add(part(cylGeo, '#c0262d', { y: .35, sx: .31, sy: .04, sz: .31 }));
+  } },
+  crown: { name: '國王皇冠', icon: '👑', price: 30, build(g) {
+    g.add(part(new THREE.CylinderGeometry(.3, .27, .16, 16, 1, true), '#ffcc1f', { y: .44, outline: true }));
+    for (let i = 0; i < 6; i++) { const a = i / 6 * Math.PI * 2; g.add(part(new THREE.ConeGeometry(.06, .16, 6), '#ffcc1f', { x: Math.cos(a) * .27, y: .58, z: Math.sin(a) * .27 })); g.add(part(sphereGeo, i % 2 ? '#e53935' : '#3fa7ff', { x: Math.cos(a) * .3, y: .44, z: Math.sin(a) * .3, sx: .04, sy: .04, sz: .04 })); }
+  } },
+};
+
 const outlineMat = new THREE.MeshBasicMaterial({ color: '#2b2433', side: THREE.BackSide });
 const sphereGeo = new THREE.SphereGeometry(1, 18, 14);
 const capGeo = new THREE.CapsuleGeometry(1, 1, 4, 10);
@@ -102,10 +128,10 @@ export class Member {
       if (def.spiky) for (let i = 0; i < 5; i++) head.add(part(new THREE.ConeGeometry(.09, .25, 6), def.hair, { x: -.24 + i * .12, y: .42, z: .05 - Math.abs(i - 2) * .04, rz: (i - 2) * -.25 }));
       else head.add(part(sphereGeo, def.hair, { x: .12, y: .3, z: .26, sx: .2, sy: .08, sz: .12, rz: -.3 }));
     }
+    this.cap = [];
     if (def.hat) {
-      head.add(part(cylGeo, def.hat, { y: .36, sx: .4, sy: .14, sz: .4 }));
-      head.add(part(sphereGeo, def.hat, { y: .38, sx: .41, sy: .2, sz: .41 }));
-      head.add(part(cylGeo, def.hat, { y: .3, z: .3, sx: .3, sy: .03, sz: .24 }));
+      this.cap.push(part(cylGeo, def.hat, { y: .36, sx: .4, sy: .14, sz: .4 }), part(sphereGeo, def.hat, { y: .38, sx: .41, sy: .2, sz: .41 }), part(cylGeo, def.hat, { y: .3, z: .3, sx: .3, sy: .03, sz: .24 }));
+      this.cap.forEach(c => head.add(c));
     }
     if (def.glasses) for (const side of [-1, 1]) {
       const ring = new THREE.Mesh(new THREE.TorusGeometry(.085, .018, 6, 14), mat('#2b2433'));
@@ -141,6 +167,18 @@ export class Member {
 
   jump() { this.jumpT = 0; }
 
+  // Team outfit from the wardrobe (bought with coins in the 3D world).
+  setHat(kind) {
+    if (this.hatGroup) { this.head.remove(this.hatGroup); this.hatGroup = null; }
+    this.cap.forEach(c => { c.visible = !kind; });
+    if (!kind || !HATS[kind]) return;
+    const g = new THREE.Group();
+    HATS[kind].build(g);
+    g.position.y = this.def.girl ? .04 : 0;
+    this.head.add(g); this.hatGroup = g;
+  }
+  wave() { this.waveT = 0; }
+
   update(dt, t) {
     const moving = this.speed > .2;
     const run = Math.min(1, this.speed / 5);
@@ -165,6 +203,14 @@ export class Member {
     this.body.position.y = y;
     this.body.scale.set(1 / Math.sqrt(sq), sq, 1 / Math.sqrt(sq));
     this.head.rotation.z = moving ? 0 : Math.sin(t * 1.3 + this.index * 2) * .06;
+    if (this.waveT !== undefined && this.waveT >= 0 && !moving) {
+      this.waveT += dt;
+      const arm = this.def.flag ? this.arms[0] : this.arms[1];
+      arm.rotation.z = (this.def.flag ? -1 : 1) * (2.4 + Math.sin(this.waveT * 14) * .35);
+      if (this.waveT > 1.3) { this.waveT = -1; arm.rotation.z = this.def.flag ? -.25 : .25; }
+    }
+    this.idle = moving ? 0 : (this.idle || 0) + dt;
+    if (this.idle > 7 + this.index * 2.3) { this.idle = 0; if (Math.random() < .5) this.wave(); else this.jump(); }
     this.blink -= dt;
     const closed = this.blink < .12;
     for (const e of this.eyes) e.scale.y = closed ? .008 : .045;
@@ -213,6 +259,7 @@ export class Party {
   }
   get moving() { return this.path.length > 0; }
   celebrate() { this.members.forEach((m, i) => setTimeout(() => m.jump(), i * 90)); }
+  setHat(kind) { this.members.forEach(m => m.setHat(kind)); }
   update(dt, t) {
     const L = this.leader.root.position;
     if (this.path.length) {

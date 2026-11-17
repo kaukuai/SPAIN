@@ -5,7 +5,7 @@ import { cities, eventKind, activityTitle as titleFor, eventClock, cityHighlight
 import { DailyMap } from './daily-map.js';
 import { venueKey } from './map-data.js';
 import { places, transportStops } from './map-places.js';
-import { emptyWishState, validWishData, allWishes, wishPage, wishesForPlace, wishCard, openWishCount, pickGacha, makeCustom, score, levelFor } from './wishlist.js';
+import { emptyWishState, validWishData, allWishes, wishPage, wishesForPlace, wishCard, wishRow, openWishCount, pickGacha, dailyPicks, makeCustom, score, levelFor } from './wishlist.js';
 import { sfx } from './world/sfx.js';
 import { TeamSync } from './sync.js';
 import { PARTY } from './world/team.js';
@@ -38,11 +38,27 @@ const safeUrl = value => { try { const u = new URL(value); return u.protocol ===
 const extLink = (url, label, cls = 'button secondary') => safeUrl(url) ? `<a class="${cls}" href="${esc(safeUrl(url))}" target="_blank" rel="noopener noreferrer">${label}</a>` : '';
 const money = n => Number(n).toLocaleString('zh-TW', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
 const activityTitle = e => titleFor(e, data().days.find(d => d.date === e.date), data().hotels);
-const state = { tab:'world', tools:emptyToolsState(), toolsLive:{}, wish:{base:null,state:emptyWishState(),ui:{tab:'do',city:'all'}}, date:null, city:null, search:'', filter:'all', mode:'share', privateTrip:null, share:null, preview:null, done:new Set(), offlineReady:false, installing:null, busy:false, syncing:false, syncMessage:'尚未檢查', checkedAt:null, siteVersion:null, swReg:null, shellUpdate:false };
+const state = { tab:'world', tools:emptyToolsState(), toolsLive:{}, wish:{base:null,state:emptyWishState(),ui:loadWishUi()}, date:null, city:null, search:'', filter:'all', mode:'share', privateTrip:null, share:null, preview:null, done:new Set(), offlineReady:false, installing:null, busy:false, syncing:false, syncMessage:'尚未檢查', checkedAt:null, siteVersion:null, swReg:null, shellUpdate:false };
 let viewerUrl, toastTimer, lastRefresh;
 let viewCache;
 let dayMap;
 let world, worldLoading;
+function loadWishUi() { const ui={tab:'list',city:'all',cat:'all',view:'rows',hideDone:false,q:''}; try{Object.assign(ui,JSON.parse(localStorage.getItem('spain-wish-ui')||'{}'));}catch{} if(!['list','stamps','badges'].includes(ui.tab))ui.tab='list'; return ui; }
+function saveWishUi() { const {tab,city,cat,view,hideDone}=state.wish.ui; try{localStorage.setItem('spain-wish-ui',JSON.stringify({tab,city,cat,view,hideDone}));}catch{} }
+const CITY_IDS=[['馬德','madrid'],['塞維','sevilla'],['格拉','granada'],['巴塞','barcelona']];
+const cityIdFromText=(text,last=false)=>{const hits=CITY_IDS.filter(([k])=>String(text).includes(k)).sort((a,b)=>String(text).indexOf(a[0])-String(text).indexOf(b[0]));return (last?hits.at(-1):hits[0])?.[1]||null;};
+// The city the team is in right now (during the trip) or on the day being viewed.
+function currentCityId(day=selectedDay()) {
+  const t=now(), today=dateInZone(t);
+  if(day?.date===today){const {current,next}=currentAndNext(events(),t);const c=(current||next)?.venue?.cityId;if(['madrid','sevilla','granada','barcelona'].includes(c))return c;}
+  return cityIdFromText(day?.city)||cityIdFromText(day?.city,true);
+}
+function wishPicksHtml(day, title) {
+  const city=currentCityId(day); if(!city||!state.wish.base) return '';
+  const picks=dailyPicks(wishItems(),state.wish.state,city,day.date,3); if(!picks.length) return '';
+  const name={madrid:'馬德里',sevilla:'塞維亞',granada:'格拉納達',barcelona:'巴塞隆納'}[city];
+  return `<section class="wish-picks"><div class="section-heading"><h2>${esc(title.replace('{city}',name))}</h2><button class="text-button" data-action="wish-open" data-city="${city}">看全部 →</button></div><div class="wrows">${picks.map(i=>wishRow(i,state.wish.state)).join('')}</div></section>`;
+}
 const TABS=['world','now','plan','wish','tools','tickets','trip'];
 const data = () => {
   if (state.mode !== 'private' || !state.privateTrip) return state.share;
@@ -127,6 +143,7 @@ function beforeTripHome() {
   return `<section class="hero"><div class="eyebrow">¡HOLA, ESPAÑA! <span>冬日慢遊</span></div><h1>下一站，<br>西班牙<span class="sun-dot"></span></h1><p>從馬德里的聖誕燈飾，走到巴塞隆納的新年。</p><div class="hero-bottom"><div><strong>${daysLeft}</strong><span>天後出發</span></div><span class="trip-stamp">12.23 — 01.04<br><small>西班牙 11 天・4 座城市</small></span></div><div class="hero-party" aria-hidden="true">${PARTY.map(m=>`<span class="wt-face ${m.id}" style="--skin:${m.skin};--hair:${m.hair}"><i></i><b>${esc(m.name)}</b></span>`).join('')}</div><ol class="hero-route" aria-label="城市路線">${[['馬德里','#ffd23f'],['塞維亞','#ff9a3c'],['格拉納達','#e8574a'],['巴塞隆納','#3fa7ff']].map(([n,c])=>`<li style="--c:${c}">${n}</li>`).join('')}</ol></section>
   <div class="section-heading"><h2>先看看抵達日</h2><span>12/24 · 馬德里</span></div>
   <button class="arrival-card" data-action="day" data-date="${first.date}"><div class="arrival-icon">${icon('pin')}</div><div><strong>市場午餐、聖誕市集</strong><p>寄物後到聖米格爾市場，下午輕鬆逛。</p></div>${icon('chevron')}</button>
+  ${wishPicksHtml(first,'🌟 抵達{city}後可以先試試')}
   ${privateMode() ? pendingSection() : `<section class="import-prompt"><h3>我們四個人的旅行工具</h3><p>同行者匯入旅行資料包，就能查看票券、住宿與離線地圖。</p><button class="button primary" data-action="import">${icon('download')}匯入同行資料包</button></section>`}
   ${citySection()}`;
 }
@@ -147,7 +164,7 @@ function home() {
   ${current ? eventCard(current,current.conditional ? '此刻的彈性安排' : '現在的行程',true) : `<section class="breather"><span>${icon('now')}</span><h2>${next ? '慢一點也沒關係' : '今天可以好好休息了'}</h2><p>${next ? `下一段在 ${shortDate(dateInZone(new Date(next.start)))} ${clock(new Date(next.start))} 開始。` : '當天排定的活動已結束。'}</p></section>`}
   ${next ? eventCard(next,`接下來${minutesUntil(next.start,t)<120 ? ' · '+minutesUntil(next.start,t)+' 分鐘後':''}`) : ''}
   ${dateInZone(t)==='2026-12-26' && privateMode() ? '<aside class="notice">21:39 到站後先入住，再赴 22:30 晚餐。只有 51 分鐘，需預辦入住與接車；22:40 僅為保留截止。</aside>' : ''}
-  <button class="button wide secondary" data-action="today">查看當天全部行程 ${icon('arrow')}</button>${citySection()}`;
+  <button class="button wide secondary" data-action="today">查看當天全部行程 ${icon('arrow')}</button>${day?wishPicksHtml(day,'🌟 不知道做什麼？在{city}可以順便'):''}${citySection()}`;
 }
 function itinerary() {
   const day=selectedDay();const t=now();
@@ -160,7 +177,7 @@ function itinerary() {
     const active=Date.parse(e.start)<=Number(t)&&Number(t)<Date.parse(e.end); const done=state.done.has(e.id);
     const zoneLabel=z=>z==='Asia/Taipei'?'台灣':z==='Asia/Shanghai'?'上海':'西班牙';
     return `${anchoredStops(day,e,true)}<article class="timeline-event kind-${eventKind(e)} ${active?'current':''} ${done?'completed':''}" id="event-${esc(e.id)}"><div class="time-rail"><strong>${eventClock(e)}</strong>${e.timezone?`<span class="rail-zone">${zoneLabel(e.timezone)}</span>`:''}<small>${e.end.slice(0,10)!==e.start.slice(0,10)?shortDate(e.end.slice(0,10))+' ':''}${eventClock(e,true)}</small>${e.isFlight?`<span class="rail-zone">${zoneLabel(e.endTimezone||e.timezone)}</span>`:''}<span class="timeline-dot"></span></div><div class="event-content"><div class="event-meta"><span>${e.lodgingAction?'住宿':esc(e.category)}</span>${active?'<span class="live-label">此刻</span>':''}${done?'<span>已標記完成</span>':''}</div><h3>${esc(activityTitle(e))}</h3>${badge(e)}<details><summary>活動資訊、提醒與連結</summary>${activityDetails(e)}${e.note?`<div class="activity-block private-note"><h4>同行提醒</h4><p>${esc(e.note)}</p></div>`:''}${e.transport?`<p class="caption">${esc(e.transport)}</p>`:''}${eventActions(e)}${extLink(e.infoUrl,'官方資訊 ↗','inline-link')}<button class="text-button" data-action="done" data-id="${esc(e.id)}">${done?'取消完成標記':'標記完成'}</button></details></div></article>${anchoredStops(day,e,false)}`;
-  }).join('')}${optionalStops(day)}</div>`;
+  }).join('')}${optionalStops(day)}</div>${wishPicksHtml(day,'🌟 這天在{city}還可以')}`;
 }
 function tickets() {
   if (!privateMode()) return `<div class="page-heading"><div><p class="eyebrow">YOUR TRAVEL WALLET</p><h1>票券，都放在這裡。</h1></div></div><section class="empty-state"><span class="empty-icon">🎫</span><h2>同行者專屬的票夾</h2><p>匯入同行資料包，票券附件就會儲存在這台手機，離線也能開啟。</p><button class="button primary" data-action="import">匯入同行資料包 ${icon('download')}</button><small>分享網址只會顯示行程版。</small></section>`;
@@ -261,7 +278,7 @@ async function loadToolWeather() {
   if(state.tab==='tools'&&state.toolsLive.weather) render();
 }
 function wishItems() { return allWishes(state.wish.base,state.wish.state); }
-function wishes() { let passport=[];try{passport=JSON.parse(localStorage.getItem('spain-passport')||'[]');}catch{} return wishPage(state.wish.base,state.wish.state,{...state.wish.ui,passport,syncCard:syncCard()}); }
+function wishes() { let passport=[];try{passport=JSON.parse(localStorage.getItem('spain-passport')||'[]');}catch{} return wishPage(state.wish.base,state.wish.state,{...state.wish.ui,passport,todayCity:currentCityId(),syncCard:syncCard()}); }
 function saveWishes() { return saveSetting('wishState',state.wish.state).catch(()=>toast('願望進度暫時無法儲存在這台裝置')); }
 const WEEKDAY=['日','一','二','三','四','五','六'];
 function dayLabel(day) { const d=new Date(day.date+'T12:00:00Z'), i=data().days.indexOf(day); return `D${i+1} · ${d.getUTCMonth()+1}/${d.getUTCDate()}（${WEEKDAY[d.getUTCDay()]}）`; }
@@ -299,6 +316,7 @@ async function mountWorld() {
     worldLoading ||= import('./world/world.js');
     const { TravelWorld }=await worldLoading;
     world ||= new TravelWorld({
+      dailyWishes:(date,city)=>dailyPicks(wishItems(),state.wish.state,city,date,3), wishDone:id=>!!state.wish.state.done[id], toggleWish:id=>toggleWish(id), cityOf:day=>currentCityId(day),
       getTrip:()=>data(), getDate:()=>selectedDay().date, setDate:setWorldDate, today:()=>dateInZone(now()), now,
       placeCard, wishCount:key=>openWishCount(wishItems(),state.wish.state,key), toast,
     });
@@ -325,7 +343,7 @@ async function toggleWish(id, button) {
   }
   await saveWishes(); render(); world?.refreshCard();
   if(!st.done[id]) return;
-  requestAnimationFrame(()=>document.querySelectorAll(`[data-action="wish-toggle"][data-id="${CSS.escape(id)}"]`).forEach(b=>b.closest('.wish')?.classList.add('just-done')));
+  requestAnimationFrame(()=>document.querySelectorAll(`[data-action="wish-toggle"][data-id="${CSS.escape(id)}"]`).forEach(b=>b.closest('.wish,.wrow')?.classList.add('just-done')));
 }
 async function loadWishBase() {
   try {
@@ -391,10 +409,15 @@ async function action(button) {
   else if (a==='sync-off') {if(!confirm('要在這支手機停用同步嗎？已同步的資料會保留在手機上。'))return;teamSync.disconnect();render();}
   else if (a==='wish-toggle') await toggleWish(button.dataset.id,button);
   else if (a==='wish-vote') {const v=state.wish.state.votes, id=button.dataset.id, m=button.dataset.member; v[id]=(v[id]||[]).includes(m)?v[id].filter(x=>x!==m):[...(v[id]||[]),m]; teamSync.change(`vote:${id}`,v[id]); sfx.play('tap'); await saveWishes(); render();}
-  else if (a==='wish-tab') {state.wish.ui.tab=button.dataset.tab;state.wish.ui.gachaPick=null;sfx.play('tap');render();}
-  else if (a==='wish-city') {state.wish.ui.city=button.dataset.city;sfx.play('tap');render();}
+  else if (a==='wish-tab') {state.wish.ui.tab=button.dataset.tab;state.wish.ui.gachaPick=null;sfx.play('tap');saveWishUi();render();}
+  else if (a==='wish-city') {state.wish.ui.city=button.dataset.city;sfx.play('tap');saveWishUi();render();}
+  else if (a==='wish-cat') {state.wish.ui.cat=button.dataset.cat;sfx.play('tap');saveWishUi();render();}
+  else if (a==='wish-hide') {state.wish.ui.hideDone=!state.wish.ui.hideDone;sfx.play('tap');saveWishUi();render();}
+  else if (a==='wish-view') {state.wish.ui.view=button.dataset.view;sfx.play('tap');saveWishUi();render();}
+  else if (a==='wish-open') {Object.assign(state.wish.ui,{tab:'list',city:button.dataset.city||'all',cat:'all',q:''});saveWishUi();tab('wish');}
+  else if (a==='wish-map') {tab('world');mountWorld().then(()=>world?.focusPlace(button.dataset.place));}
   else if (a==='wish-gacha') {
-    const city=({'馬德':'madrid','塞維':'sevilla','格拉':'granada','巴塞':'barcelona'})[Object.keys({'馬德':1,'塞維':1,'格拉':1,'巴塞':1}).find(k=>selectedDay().city.includes(k))]||'spain';
+    const city=currentCityId()||'all';
     state.wish.ui.gachaSpin=true;state.wish.ui.gachaPick=null;sfx.play('gacha');render();
     setTimeout(()=>{state.wish.ui.gachaSpin=false;state.wish.ui.gachaPick=pickGacha(wishItems(),state.wish.state,city);if(!state.wish.ui.gachaPick)toast('所有願望都完成了！太厲害了 🎉');render();},900);
   }
@@ -426,6 +449,7 @@ document.addEventListener('submit', async e => {
 });
 document.addEventListener('change', e => { if(e.target.matches?.('[data-sync-who]')) { teamSync.setWho(e.target.value); toast('已記住你是誰'); } });
 document.addEventListener('input', e => {
+  if(e.target.id==='wish-search'){state.wish.ui.q=e.target.value;render();return;}
   const tool=e.target.dataset?.toolInput;
   if(tool){const v=Number(e.target.value);if(Number.isFinite(v)&&v>=0){state.tools[tool]=tool==='rate'?(v||null):v;if(tool==='rate')state.tools.rateAt=null;saveTools();const out=$('.money-out strong');if(out)out.textContent=`NT$ ${Math.round((Number(state.tools.eur)||0)*(state.tools.rate||35)).toLocaleString('zh-TW')}`;}return;}
   if(e.target.id==='ticket-search') {state.search=e.target.value;const pos=e.target.selectionStart;render();$('#ticket-search').focus();try{$('#ticket-search').setSelectionRange(pos,pos);}catch{}}
