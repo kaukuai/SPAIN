@@ -1,11 +1,12 @@
-// Shares wishlist stamps/votes/custom wishes and the bill-splitting ledger between the
+// Shares wishlist stamps/votes/custom wishes, hotel locations and the bill-splitting ledger between the
 // team's phones through /api/sync. Each item is its own field; the newest edit wins.
 export const CODE_KEY = 'spain-team-code', WHO_KEY = 'spain-team-who';
 const store = { get: k => { try { return localStorage.getItem(k) || ''; } catch { return ''; } }, set: (k, v) => { try { v ? localStorage.setItem(k, v) : localStorage.removeItem(k); } catch {} } };
 
 // Every shareable field currently on this phone.
-export function localFields(wish, tools) {
+export function localFields(wish, tools, lodging = {}) {
   const out = {};
+  for (const [city, h] of Object.entries(lodging || {})) if (h) out[`hotel:${city}`] = h;
   for (const [id, t] of Object.entries(wish.done || {})) out[`done:${id}`] = t;
   for (const [id, v] of Object.entries(wish.votes || {})) out[`vote:${id}`] = v;
   for (const item of wish.custom || []) out[`custom:${item.id}`] = item;
@@ -14,12 +15,13 @@ export function localFields(wish, tools) {
 }
 
 // Apply one server field to the local state. Returns true when something changed.
-export function applyField(name, v, wish, tools) {
+export function applyField(name, v, wish, tools, lodging = {}) {
   const i = name.indexOf(':'), kind = name.slice(0, i), id = name.slice(i + 1);
   const same = (a, b) => JSON.stringify(a ?? null) === JSON.stringify(b ?? null);
   if (kind === 'done') { const cur = wish.done[id] || 0; if (v) { if (cur === v) return false; wish.done[id] = v; } else { if (!cur) return false; delete wish.done[id]; } return true; }
   if (kind === 'vote') { if (same(wish.votes[id] || [], v || [])) return false; if (Array.isArray(v) && v.length) wish.votes[id] = v; else delete wish.votes[id]; return true; }
   if (kind === 'custom') { const at = wish.custom.findIndex(x => x.id === id); if (v) { if (at >= 0 && same(wish.custom[at], v)) return false; at >= 0 ? (wish.custom[at] = v) : wish.custom.push(v); } else { if (at < 0) return false; wish.custom.splice(at, 1); delete wish.done[id]; } return true; }
+  if (kind === 'hotel') { if (same(lodging[id], v)) return false; if (v) lodging[id] = v; else delete lodging[id]; return true; }
   if (kind === 'exp') { const at = tools.expenses.findIndex(x => x.id === id); if (v) { if (at >= 0 && same(tools.expenses[at], v)) return false; at >= 0 ? (tools.expenses[at] = v) : tools.expenses.push(v); tools.expenses.sort((a, b) => a.at - b.at); } else { if (at < 0) return false; tools.expenses.splice(at, 1); } return true; }
   return false;
 }
@@ -40,8 +42,8 @@ export class TeamSync {
 
   async connect(code) {
     store.set(CODE_KEY, code.trim());
-    const { wish, tools } = this.getState();
-    for (const [name, v] of Object.entries(localFields(wish, tools))) this.pending[name] = { v, t: this.meta[name] || 1 };
+    const { wish, tools, lodging } = this.getState();
+    for (const [name, v] of Object.entries(localFields(wish, tools, lodging))) this.pending[name] = { v, t: this.meta[name] || 1 };
     const ok = await this.sync();
     if (!ok && this.status === 'bad-code') store.set(CODE_KEY, '');
     return ok;
@@ -76,12 +78,12 @@ export class TeamSync {
       const res = await this.request('GET');
       if (!res.ok) return this.fail(res.status);
       const { fields } = await res.json();
-      const { wish, tools } = this.getState();
+      const { wish, tools, lodging } = this.getState();
       let changed = false;
       for (const [name, f] of Object.entries(fields || {})) {
         if (f.t <= (this.meta[name] || 0)) continue;
         this.meta[name] = f.t;
-        if (applyField(name, f.v, wish, tools)) changed = true;
+        if (applyField(name, f.v, wish, tools, lodging)) changed = true;
       }
       this.saveMeta();
       this.lastAt = Date.now();

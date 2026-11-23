@@ -34,8 +34,9 @@ export function localMatrix(o = {}) {
 // Batch collects painted, transformed geometry and merges it per material kind.
 export class Batch {
   constructor() {
-    this.lists = { toon: [], light: [], glass: [] };
+    this.lists = { toon: [], light: [], glass: [], outline: [] };
     this.stack = [new THREE.Matrix4()];
+    this.outline = 0; // world-unit ink line thickness for "hero" buildings; 0 = none
   }
   get matrix() { return this.stack[this.stack.length - 1]; }
   push(o = {}) { this.stack.push(this.matrix.clone().multiply(localMatrix(o))); return this; }
@@ -54,7 +55,19 @@ export class Batch {
     for (let i = 0; i < n; i++) { arr[i * 3] = _c.r; arr[i * 3 + 1] = _c.g; arr[i * 3 + 2] = _c.b; }
     g.setAttribute('color', new THREE.BufferAttribute(arr, 3));
     (this.lists[kind] || this.lists.toon).push(g);
+    if (this.outline > 0 && kind === 'toon') this.addOutline(g);
     return this;
+  }
+  // Inverted-hull ink outline: the same shape grown by a fixed thickness, drawn back-faces only.
+  addOutline(g) {
+    g.computeBoundingBox();
+    const bb = g.boundingBox, size = new THREE.Vector3(), c = new THREE.Vector3();
+    bb.getSize(size); bb.getCenter(c);
+    if (Math.max(size.x, size.y, size.z) < .35) return;
+    const t = this.outline, o = g.clone();
+    const sx = (size.x + 2 * t) / Math.max(size.x, .02), sy = (size.y + 2 * t) / Math.max(size.y, .02), sz = (size.z + 2 * t) / Math.max(size.z, .02);
+    o.applyMatrix4(new THREE.Matrix4().makeTranslation(-c.x, -c.y, -c.z)).applyMatrix4(new THREE.Matrix4().makeScale(sx, sy, sz)).applyMatrix4(new THREE.Matrix4().makeTranslation(c.x, c.y, c.z));
+    this.lists.outline.push(o);
   }
 
   // Primitives are bottom-aligned (y = base) unless noted, which keeps stacking simple.
@@ -89,23 +102,33 @@ export class Batch {
     return this.add(g, color, o, kind);
   }
   // Front-facing window/door insets: drawn in the "light" batch so they glow at night.
-  win(w, h, o = {}, color = '#ffd36b') { return this.box(w, h, .12, color, o, 'light'); }
+  win(w, h, o = {}, color = '#ffd36b') {
+    // detailed buildings get a white frame and a sill under each window
+    if (this.outline > 0 && w > .25 && h > .25) {
+      this.box(w + .14, h + .14, .08, '#fff8ea', { ...o, y: (o.y || 0) - .07, z: (o.z || 0) - .03 });
+      this.box(w + .22, .08, .2, '#efe2c6', { ...o, y: (o.y || 0) - .1 });
+    }
+    return this.box(w, h, .12, color, o, 'light');
+  }
 
   build(materials) {
     const group = new THREE.Group();
     for (const [kind, list] of Object.entries(this.lists)) {
       if (!list.length) continue;
-      const mesh = new THREE.Mesh(mergeGeometries(list), materials[kind]);
+      const mat = kind === 'outline' ? (materials.outline || OUTLINE_MAT) : materials[kind];
+      const mesh = new THREE.Mesh(mergeGeometries(list), mat);
       mesh.castShadow = kind === 'toon';
       mesh.receiveShadow = kind !== 'light';
       mesh.matrixAutoUpdate = false;
       group.add(mesh);
       list.forEach(g => g.dispose());
     }
-    this.lists = { toon: [], light: [], glass: [] };
+    this.lists = { toon: [], light: [], glass: [], outline: [] };
     return group;
   }
 }
+
+const OUTLINE_MAT = new THREE.MeshBasicMaterial({ color: '#2b2433', side: THREE.BackSide });
 
 export function mergeGeometries(list) {
   let total = 0, totalIdx = 0;

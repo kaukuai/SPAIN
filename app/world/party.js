@@ -79,11 +79,14 @@ export class Member {
       const pivot = new THREE.Group(); pivot.position.set(side * .15, legY, 0);
       pivot.add(part(capGeo, def.pants, { y: -.18, sx: .1, sy: .12, sz: .1 }));
       pivot.add(part(sphereGeo, '#ffffff', { y: -.38, z: .04, sx: .13, sy: .09, sz: .17, outline: true }));
+      pivot.add(part(sphereGeo, '#5a4a6a', { y: -.44, z: .04, sx: .135, sy: .035, sz: .175 }));
       this.body.add(pivot); return pivot;
     });
     // torso
     this.torso = part(sphereGeo, def.shirt, { y: .66, sx: .32, sy: .34, sz: .28, outline: true });
     this.body.add(this.torso);
+    this.body.add(part(new THREE.TorusGeometry(.13, .035, 6, 16), '#ffffff', { y: .97, rx: Math.PI / 2 }));
+    for (let k = 0; k < 2; k++) this.body.add(part(sphereGeo, '#ffffff', { y: .74 - k * .13, z: .275, sx: .025, sy: .025, sz: .015 }));
     if (def.girl) {
       const skirt = new THREE.Mesh(new THREE.CylinderGeometry(.24, .38, .3, 14), mat(def.skirt));
       skirt.position.y = .42; skirt.castShadow = true; this.body.add(skirt);
@@ -106,7 +109,12 @@ export class Member {
       head.add(e); return e;
     });
     for (const side of [-1, 1]) head.add(part(sphereGeo, '#ff9aa2', { x: side * .25, y: -.1, z: .32, sx: .07, sy: .04, sz: .03 }));
-    head.add(part(sphereGeo, '#c9705a', { y: -.15, z: .39, sx: .06, sy: .025, sz: .02 }));
+    // smile, nose, ears and eyebrows
+    this.mouth = part(new THREE.TorusGeometry(.07, .016, 6, 12, Math.PI), '#8a3a2a', { y: -.12, z: .39, rz: Math.PI });
+    head.add(this.mouth);
+    head.add(part(sphereGeo, def.skin, { y: -.04, z: .41, sx: .045, sy: .035, sz: .035 }));
+    for (const side of [-1, 1]) head.add(part(sphereGeo, def.skin, { x: side * .43, y: -.02, sx: .07, sy: .09, sz: .06 }));
+    if (!def.girl) for (const side of [-1, 1]) head.add(part(new THREE.BoxGeometry(1, 1, 1), def.hair, { x: side * .14, y: .13, z: .38, sx: .11, sy: .025, sz: .02, rz: side * .12 }));
     if (def.girl) {
       head.add(part(sphereGeo, def.hair, { y: .1, z: -.05, sx: .47, sy: .38, sz: .44 }));
       head.add(part(sphereGeo, def.hair, { y: -.12, z: -.16, sx: .42, sy: .42, sz: .3 }));
@@ -201,6 +209,7 @@ export class Member {
       } else { this.jumpT = -1; this.arms[0].rotation.z = -.25; if (!this.def.flag) this.arms[1].rotation.z = .25; }
     }
     this.body.position.y = y;
+    if (this.mouth) this.mouth.scale.set(this.jumpT >= 0 ? 1.3 : 1, this.jumpT >= 0 ? 1.8 : 1, 1);
     this.body.scale.set(1 / Math.sqrt(sq), sq, 1 / Math.sqrt(sq));
     this.head.rotation.z = moving ? 0 : Math.sin(t * 1.3 + this.index * 2) * .06;
     if (this.waveT !== undefined && this.waveT >= 0 && !moving) {

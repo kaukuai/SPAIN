@@ -8,6 +8,7 @@ import { places, transportStops } from './map-places.js';
 import { emptyWishState, validWishData, allWishes, wishPage, wishesForPlace, wishCard, wishRow, openWishCount, pickGacha, dailyPicks, makeCustom, score, levelFor } from './wishlist.js';
 import { sfx } from './world/sfx.js';
 import { TeamSync } from './sync.js';
+import { locate, eventCity, bookingStatus, bookingOverview, hotelLink, directionsFor, CITY_NAMES } from './navigation.js';
 import { PARTY } from './world/team.js';
 import { emptyToolsState, toolsPage, makeExpense, settleText, fetchToolWeather, fetchRate } from './tools.js';
 
@@ -38,7 +39,7 @@ const safeUrl = value => { try { const u = new URL(value); return u.protocol ===
 const extLink = (url, label, cls = 'button secondary') => safeUrl(url) ? `<a class="${cls}" href="${esc(safeUrl(url))}" target="_blank" rel="noopener noreferrer">${label}</a>` : '';
 const money = n => Number(n).toLocaleString('zh-TW', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
 const activityTitle = e => titleFor(e, data().days.find(d => d.date === e.date), data().hotels);
-const state = { tab:'world', tools:emptyToolsState(), toolsLive:{}, wish:{base:null,state:emptyWishState(),ui:loadWishUi()}, date:null, city:null, search:'', filter:'all', mode:'share', privateTrip:null, share:null, preview:null, done:new Set(), offlineReady:false, installing:null, busy:false, syncing:false, syncMessage:'尚未檢查', checkedAt:null, siteVersion:null, swReg:null, shellUpdate:false };
+const state = { tab:'world', lodging:{}, tools:emptyToolsState(), toolsLive:{}, wish:{base:null,state:emptyWishState(),ui:loadWishUi()}, date:null, city:null, search:'', filter:'all', mode:'share', privateTrip:null, share:null, preview:null, done:new Set(), offlineReady:false, installing:null, busy:false, syncing:false, syncMessage:'尚未檢查', checkedAt:null, siteVersion:null, swReg:null, shellUpdate:false };
 let viewerUrl, toastTimer, lastRefresh;
 let viewCache;
 let dayMap;
@@ -50,7 +51,7 @@ const cityIdFromText=(text,last=false)=>{const hits=CITY_IDS.filter(([k])=>Strin
 // The city the team is in right now (during the trip) or on the day being viewed.
 function currentCityId(day=selectedDay()) {
   const t=now(), today=dateInZone(t);
-  if(day?.date===today){const {current,next}=currentAndNext(events(),t);const c=(current||next)?.venue?.cityId;if(['madrid','sevilla','granada','barcelona'].includes(c))return c;}
+  if(day?.date===today){const {current,next}=currentAndNext(events(),t);const e=current||next;const i=e?day.events.findIndex(x=>x.id===e.id):-1;const c=i>=0?eventCity(day,i):e?.venue?.cityId;if(CITY_NAMES[c])return c;}
   return cityIdFromText(day?.city)||cityIdFromText(day?.city,true);
 }
 function wishPicksHtml(day, title) {
@@ -84,18 +85,55 @@ function timeLabel(e) { return e.displayTime || `${eventClock(e)}–${eventClock
 function ticketAction(e) {
   return privateMode() && e.ticketIds?.length ? `<button class="button secondary" data-action="event-tickets" data-ids="${esc(e.ticketIds.join(','))}">${icon('ticket')}票券</button>` : '';
 }
+// ---- navigation: every entry gets a way to its place (venue, hotel, next stop or airport)
+function hotelsByCity() {
+  const out={};
+  for (const [id,name] of Object.entries(CITY_NAMES)) {
+    const mine=state.lodging[id];
+    if (mine&&(mine.name||mine.address||mine.url)) { out[id]=mine; continue; }
+    const h=(state.privateTrip?.hotels||[]).find(x=>String(x.city||'').includes(name));
+    if (h) out[id]={name:h.name,address:h.address,url:h.mapUrl||''};
+  }
+  return out;
+}
+function whereIs(e) {
+  const days=data().days;
+  const day=days.find(d=>d.date===e.date&&d.events.some(x=>x.id===e.id))||days.find(d=>d.events.some(x=>x.id===e.id||x.id===e.sourceEventId));
+  if(!day) return e.mapUrl?{kind:'place',pin:e.mapUrl,dir:directionsFor(e.mapUrl)}:{kind:'none'};
+  if(e.mapUrl&&!day.events.some(x=>x.id===e.id)) return {kind:'place',pin:e.mapUrl,dir:directionsFor(e.mapUrl)};
+  return locate(day,day.events.findIndex(x=>x.id===(day.events.some(y=>y.id===e.id)?e.id:e.sourceEventId)),hotelsByCity());
+}
+const navLink=(url,label,cls='button primary nav-go')=>safeUrl(url)?`<a class="${cls}" href="${esc(safeUrl(url))}" target="_blank" rel="noopener noreferrer">${label}</a>`:'';
+function navButtons(e) {
+  const r=whereIs(e);
+  if(r.kind==='hotel') return `${navLink(r.dir,'🏨 導航回住宿')}<button class="button secondary" data-action="driver-card" data-city="${r.city}">🚕 給司機看</button>`;
+  if(r.kind==='hotel-missing') return `<button class="button secondary" data-action="lodging-setup" data-city="${r.city||''}">🏨 設定${esc(CITY_NAMES[r.city]||'')}住宿位置</button>`;
+  if(r.kind==='choice') return r.options.map(o=>navLink(o.dir,`🧭 ${esc(o.name)}`)).join('');
+  if(['place','airport','route'].includes(r.kind)) return `${navLink(r.dir,r.kind==='route'?`🧭 導航到${esc(String(r.name||'下一站').split(/[（(｜]/)[0])}`:r.kind==='airport'?'✈️ 導航到機場':'🧭 導航路線')}${navLink(r.pin,'地圖位置 ↗','inline-link')}`;
+  return '';
+}
+function navChip(e) {
+  const r=whereIs(e);
+  if(r.kind==='hotel-missing') return `<button class="nav-chip" data-action="lodging-setup" data-city="${r.city||''}" aria-label="設定住宿位置">🏨</button>`;
+  const url=r.kind==='choice'?null:r.dir; if(!safeUrl(url)) return '';
+  return `<a class="nav-chip" href="${esc(safeUrl(url))}" target="_blank" rel="noopener noreferrer" aria-label="導航">${r.kind==='hotel'?'🏨':r.kind==='airport'?'✈️':'🧭'}</a>`;
+}
+function bookingBadge(e) {
+  const b=bookingStatus(e); if(!b) return '';
+  return `<span class="book book-${b.kind}">${b.icon} ${esc(b.label)}</span>`;
+}
 function eventActions(e) {
-  return `<div class="actions">${extLink(e.mapUrl, `${icon('map')}開啟導航`)}${e.ticketPlan?extLink(e.ticketPlan.url,'購票／官方資訊 ↗'):''}${ticketAction(e)}</div>`;
+  return `<div class="actions">${navButtons(e)}${e.ticketPlan?extLink(e.ticketPlan.url,'購票／官方資訊 ↗'):''}${ticketAction(e)}</div>`;
 }
 function activityDetails(e) {
   const info=e.activity||{};
   const list=(items,label)=>items?.length?`<div class="activity-block"><h4>${label}</h4><ul>${items.map(item=>`<li>${esc(item)}</li>`).join('')}</ul></div>`:'';
-  const choices=e.mealOptions?.length?`<div class="meal-options"><h4>已訂午餐・兩間擇一</h4>${e.mealOptions.map(option=>`<article class="meal-option"><h4>${esc(option.title)}</h4><p>${esc(option.displayTime)}</p>${badge(option)}${activityDetails(option)}${extLink(option.mapUrl,`${icon('map')}查看這間餐廳`,'button secondary')}</article>`).join('')}</div>`:'';
+  const choices=e.mealOptions?.length?`<div class="meal-options"><h4>已訂午餐・兩間擇一</h4>${e.mealOptions.map(option=>`<article class="meal-option"><h4>${esc(option.title)}</h4><p>${esc(option.displayTime)}</p>${badge(option)}${bookingBadge({...option,category:e.category})}${activityDetails(option)}<div class="actions">${navLink(directionsFor(option.mapUrl),'🧭 導航到這間')}${navLink(option.mapUrl,'地圖位置 ↗','inline-link')}</div></article>`).join('')}</div>`:'';
   return `<div class="activity-details">${info.description?`<div class="activity-block"><h4>活動資訊</h4><p>${esc(info.description)}</p></div>`:''}${choices}${list(info.highlights,'參觀重點')}${list(info.mustTry,'必點／推薦')}${info.openingHours?`<div class="activity-block"><h4>營業資訊</h4><p>${esc(info.openingHours)}</p></div>`:''}${list(info.tips,'注意事項')}${info.photoTip?`<div class="activity-block"><h4>拍照提示</h4><p>${esc(info.photoTip)}</p></div>`:''}</div>`;
 }
 function optionalStops(day, stops=(day.optionalStops||[]).filter(stop=>!stop.beforeEventId&&!stop.afterEventId), anchored=false) {
   if(!stops.length)return '';
-  return `<aside class="optional-stops ${anchored?'anchored-stops':''}" aria-label="無固定時間的備選地點"><h3>${anchored?'順路備選・不指定時間':'附近備選・有空再去'}</h3><p class="caption">沒有安排固定時間，順路、有空再選。</p>${stops.map(stop=>`<article class="optional-stop" ${stop.id?`id="stop-${esc(stop.id)}"`:''}><span class="optional-label">彈性地點</span><h3>${esc(stop.displayTitle||stop.title)}</h3>${badge(stop)}<p>${esc(stop.description||stop.note)}</p>${stop.openingHours?`<p class="optional-hours">營業：${esc(stop.openingHours)}</p>`:''}<details><summary>店家資訊與注意事項</summary>${activityDetails({activity:{mustTry:stop.mustTry||[],tips:stop.note?[stop.note]:[]}})}${extLink(stop.mapUrl,`${icon('map')}查看店家位置`,'button secondary')}${stop.reminderId?`<button class="file-button" data-action="calendar" data-id="${esc(stop.reminderId)}">下載訂位提醒</button>`:''}</details></article>`).join('')}</aside>`;
+  return `<aside class="optional-stops ${anchored?'anchored-stops':''}" aria-label="無固定時間的備選地點"><h3>${anchored?'順路備選・不指定時間':'附近備選・有空再去'}</h3><p class="caption">沒有安排固定時間，順路、有空再選。</p>${stops.map(stop=>`<article class="optional-stop" ${stop.id?`id="stop-${esc(stop.id)}"`:''}><span class="optional-label">彈性地點</span><h3>${esc(stop.displayTitle||stop.title)}</h3>${badge(stop)}<p>${esc(stop.description||stop.note)}</p>${stop.openingHours?`<p class="optional-hours">營業：${esc(stop.openingHours)}</p>`:''}<details><summary>店家資訊與注意事項</summary>${activityDetails({activity:{mustTry:stop.mustTry||[],tips:stop.note?[stop.note]:[]}})}${navLink(directionsFor(stop.mapUrl),'🧭 導航到這裡')}${navLink(stop.mapUrl,'地圖位置 ↗','inline-link')}${stop.reminderId?`<button class="file-button" data-action="calendar" data-id="${esc(stop.reminderId)}">下載訂位提醒</button>`:''}</details></article>`).join('')}</aside>`;
 }
 function anchoredStops(day,event,before) {
   return optionalStops(day,(day.optionalStops||[]).filter(stop=>(before?stop.beforeEventId:stop.afterEventId)===event.id),true);
@@ -105,8 +143,8 @@ const cityColor=text=>(CITY_COLORS.find(([k])=>String(text).includes(k))||[,'#9d
 const cityEmoji=text=>(CITY_COLORS.find(([k])=>String(text).includes(k))||[,,'📍'])[2];
 function cityEntry(entry) {
   const e=entry.stop;
-  if(entry.kind==='optional')return `<details class="city-stop optional"><summary><span class="city-stop-meta">有空再去・無固定時間</span><strong>${esc(e.displayTitle||e.title)}</strong></summary>${badge(e)}<p class="caption">${esc(e.description||e.note)}</p>${e.openingHours?`<p class="caption">${esc(e.openingHours)}</p>`:''}${activityDetails({activity:{mustTry:e.mustTry||[],tips:e.note?[e.note]:[]}})}${extLink(e.mapUrl,'查看位置 ↗','inline-link')}</details>`;
-  return `<details class="city-stop kind-${eventKind(e)}"><summary><span class="city-stop-meta">${esc(timeLabel(e))} · ${esc(e.category)}${e.conditional?' · 彈性':''}</span><strong>${esc(e.overviewTitle)}</strong></summary>${badge(e)}${activityDetails(e)}${eventActions(e)}</details>`;
+  if(entry.kind==='optional')return `<details class="city-stop optional"><summary><span class="city-stop-meta">有空再去・無固定時間</span><strong>${esc(e.displayTitle||e.title)}</strong></summary>${badge(e)}<p class="caption">${esc(e.description||e.note)}</p>${e.openingHours?`<p class="caption">${esc(e.openingHours)}</p>`:''}${activityDetails({activity:{mustTry:e.mustTry||[],tips:e.note?[e.note]:[]}})}<div class="actions">${navLink(directionsFor(e.mapUrl),'🧭 導航到這裡')}${navLink(e.mapUrl,'地圖位置 ↗','inline-link')}</div></details>`;
+  return `<details class="city-stop kind-${eventKind(e)}"><summary><span class="city-stop-meta">${esc(timeLabel(e))} · ${esc(e.category)}${e.conditional?' · 彈性':''}</span><strong>${esc(e.overviewTitle)}</strong>${bookingBadge(e)}</summary>${badge(e)}${activityDetails(e)}${eventActions(e)}</details>`;
 }
 function citySection() {
   const city=cities.find(c=>c.id===state.city);
@@ -132,7 +170,7 @@ function eventCard(e, label, prominent = false) {
   if (!e) return '';
   const limit=prominent?56:48;
   const brief=e.note?.length>limit?e.note.slice(0,limit)+'…':e.note;
-  return `<article class="${prominent ? 'focus-card' : 'next-card'} kind-${eventKind(e)}"><div class="eyebrow">${esc(label)}<span>${esc(timeLabel(e))}</span></div><h2>${esc(activityTitle(e))}</h2>${badge(e)}${brief ? `<p class="event-note">${esc(brief)}</p>` : ''}<details class="full-note"><summary>活動資訊與完整提醒</summary>${activityDetails(e)}${e.note?`<p>${esc(e.note)}</p>`:''}</details>${eventActions(e)}${prominent && e.id ? `<button class="text-button done-button" data-action="done" data-id="${esc(e.id)}">${icon('check')}${state.done.has(e.id) ? '已標記完成 · 再按取消' : '標記這一站已完成'}</button>` : ''}</article>`;
+  return `<article class="${prominent ? 'focus-card' : 'next-card'} kind-${eventKind(e)}"><div class="eyebrow">${esc(label)}<span>${esc(timeLabel(e))}</span></div><h2>${esc(activityTitle(e))}</h2>${badge(e)}${bookingBadge(e)}${brief ? `<p class="event-note">${esc(brief)}</p>` : ''}<details class="full-note"><summary>活動資訊與完整提醒</summary>${activityDetails(e)}${e.note?`<p>${esc(e.note)}</p>`:''}</details>${eventActions(e)}${prominent && e.id ? `<button class="text-button done-button" data-action="done" data-id="${esc(e.id)}">${icon('check')}${state.done.has(e.id) ? '已標記完成 · 再按取消' : '標記這一站已完成'}</button>` : ''}</article>`;
 }
 function beforeTripHome() {
   const first = data().days.find(d=>d.date==='2026-12-24') || data().days[0];
@@ -161,6 +199,7 @@ function home() {
   const day = data().days.find(d => d.date === (current?.date || dateInZone(t)));
   return `<div class="page-heading"><div><p class="eyebrow">${day ? `D${data().days.indexOf(day)+1} · ${esc(day.city)}` : '移動日 · 航空行程'}</p><h1>把此刻，交給旅程。</h1></div><span class="date-label">${shortDate(dateInZone(t))}</span></div>
   <div class="clock-strip"><span>西班牙 <b>${clock(t)}</b></span><span>台灣 <b>${clock(t,'Asia/Taipei')}</b></span><span class="online-dot ${navigator.onLine?'':'offline'}">${navigator.onLine?'已連線':'離線中'}</span></div>
+  ${quickNav(current,next)}
   ${current ? eventCard(current,current.conditional ? '此刻的彈性安排' : '現在的行程',true) : `<section class="breather"><span>${icon('now')}</span><h2>${next ? '慢一點也沒關係' : '今天可以好好休息了'}</h2><p>${next ? `下一段在 ${shortDate(dateInZone(new Date(next.start)))} ${clock(new Date(next.start))} 開始。` : '當天排定的活動已結束。'}</p></section>`}
   ${next ? eventCard(next,`接下來${minutesUntil(next.start,t)<120 ? ' · '+minutesUntil(next.start,t)+' 分鐘後':''}`) : ''}
   ${dateInZone(t)==='2026-12-26' && privateMode() ? '<aside class="notice">21:39 到站後先入住，再赴 22:30 晚餐。只有 51 分鐘，需預辦入住與接車；22:40 僅為保留截止。</aside>' : ''}
@@ -176,7 +215,7 @@ function itinerary() {
   <div class="timeline">${day.events.map(e => {
     const active=Date.parse(e.start)<=Number(t)&&Number(t)<Date.parse(e.end); const done=state.done.has(e.id);
     const zoneLabel=z=>z==='Asia/Taipei'?'台灣':z==='Asia/Shanghai'?'上海':'西班牙';
-    return `${anchoredStops(day,e,true)}<article class="timeline-event kind-${eventKind(e)} ${active?'current':''} ${done?'completed':''}" id="event-${esc(e.id)}"><div class="time-rail"><strong>${eventClock(e)}</strong>${e.timezone?`<span class="rail-zone">${zoneLabel(e.timezone)}</span>`:''}<small>${e.end.slice(0,10)!==e.start.slice(0,10)?shortDate(e.end.slice(0,10))+' ':''}${eventClock(e,true)}</small>${e.isFlight?`<span class="rail-zone">${zoneLabel(e.endTimezone||e.timezone)}</span>`:''}<span class="timeline-dot"></span></div><div class="event-content"><div class="event-meta"><span>${e.lodgingAction?'住宿':esc(e.category)}</span>${active?'<span class="live-label">此刻</span>':''}${done?'<span>已標記完成</span>':''}</div><h3>${esc(activityTitle(e))}</h3>${badge(e)}<details><summary>活動資訊、提醒與連結</summary>${activityDetails(e)}${e.note?`<div class="activity-block private-note"><h4>同行提醒</h4><p>${esc(e.note)}</p></div>`:''}${e.transport?`<p class="caption">${esc(e.transport)}</p>`:''}${eventActions(e)}${extLink(e.infoUrl,'官方資訊 ↗','inline-link')}<button class="text-button" data-action="done" data-id="${esc(e.id)}">${done?'取消完成標記':'標記完成'}</button></details></div></article>${anchoredStops(day,e,false)}`;
+    return `${anchoredStops(day,e,true)}<article class="timeline-event kind-${eventKind(e)} ${active?'current':''} ${done?'completed':''}" id="event-${esc(e.id)}"><div class="time-rail"><strong>${eventClock(e)}</strong>${e.timezone?`<span class="rail-zone">${zoneLabel(e.timezone)}</span>`:''}<small>${e.end.slice(0,10)!==e.start.slice(0,10)?shortDate(e.end.slice(0,10))+' ':''}${eventClock(e,true)}</small>${e.isFlight?`<span class="rail-zone">${zoneLabel(e.endTimezone||e.timezone)}</span>`:''}<span class="timeline-dot"></span></div><div class="event-content"><div class="event-meta"><span>${e.lodgingAction?'住宿':esc(e.category)}</span>${active?'<span class="live-label">此刻</span>':''}${done?'<span>已標記完成</span>':''}${bookingBadge(e)}${navChip(e)}</div><h3>${esc(activityTitle(e))}</h3>${badge(e)}<details><summary>活動資訊、提醒與連結</summary>${activityDetails(e)}${e.note?`<div class="activity-block private-note"><h4>同行提醒</h4><p>${esc(e.note)}</p></div>`:''}${e.transport?`<p class="caption">${esc(e.transport)}</p>`:''}${eventActions(e)}${extLink(e.infoUrl,'官方資訊 ↗','inline-link')}<button class="text-button" data-action="done" data-id="${esc(e.id)}">${done?'取消完成標記':'標記完成'}</button></details></div></article>${anchoredStops(day,e,false)}`;
   }).join('')}${optionalStops(day)}</div>${wishPicksHtml(day,'🌟 這天在{city}還可以')}`;
 }
 function tickets() {
@@ -191,6 +230,35 @@ function tickets() {
   <div class="filters">${[['all','全部'],['confirmed','已確認'],['pending','待處理']].map(([key,title])=>`<button data-action="filter" data-filter="${key}" class="${state.filter===key?'selected':''}" aria-pressed="${state.filter===key}">${title}</button>`).join('')}</div>
   <p class="caption">「開啟附件」可離線使用；Drive 與官方網站需連線。</p><div class="ticket-grid">${filtered.map(t=>`<article class="ticket-card"><div class="ticket-top"><span>${esc(t.date ? shortDate(t.date):'航程')}</span>${badge(t)}</div><h2>${esc(t.title)}</h2><p class="ticket-time">${esc(t.time)}</p>${t.report?`<p class="caption">報到／到站：${esc(t.report)}</p>`:''}${t.id==='K17'?(t.price?`<div class="price-note">先前提供總額 <strong>€${esc(t.price.user_reported_total_eur)}</strong><small>票面合計€${esc(t.price.face_total_eur)}，差€${esc(t.price.price_difference_eur)}待核對；原票已取得。</small></div>`:'<div class="price-note">四人合計 <strong>€100.75</strong><small>使用者確認已購 · 原票待補</small></div>'):''}<div class="ticket-cut"></div><details ${t.statusKind==='warning'?'open':''}><summary>注意事項與附件${t.files.length?' · '+t.files.length+' 份':''}</summary><p>${esc(t.note)}</p>${t.files.length?`<ul class="file-list">${t.files.map(f=>`<li><span>${esc(f.label)}</span><div>${f.assetId?`<button class="file-button" data-action="asset" data-id="${f.assetId}">開啟附件</button>`:''}${extLink(f.url,'Drive ↗','inline-link')}</div></li>`).join('')}</ul>`:'<p class="caption">目前沒有可出示的原始附件。</p>'}${extLink(t.url,t.statusKind==='warning'?'查看訂位／購票入口 ↗':'開啟來源 ↗','inline-link')}</details></article>`).join('')||'<div class="empty-state"><p>沒有符合的票券，試試其他關鍵字。</p></div>'}</div>`;
 }
+const LODGING_DATES={madrid:'12/24–12/26',sevilla:'12/26–12/28',granada:'12/28–12/29',barcelona:'12/29–1/3'};
+function lodgingCard() {
+  const hotels=hotelsByCity();
+  return `<section class="settings-card lodging-card" id="lodging"><h2>🏨 我們的住宿</h2><p>填好每座城市的住宿（名稱＋地址，或直接貼 Google 地圖分享連結），行程裡所有「回住宿／公寓」都會出現導航按鈕，也能一鍵「給司機看」。${teamSync.enabled?'已連線團隊同步，填一次四個人都會有。':'連線團隊同步後，填一次四個人都會有。'}</p>
+    ${Object.entries(CITY_NAMES).map(([id,name])=>{const h=state.lodging[id]||{},auto=!state.lodging[id]&&hotels[id],link=hotelLink(hotels[id]);
+      return `<details class="lodging-city" id="lodging-${id}" ${!link?'open':''}><summary><b>${name}</b><small>${LODGING_DATES[id]}</small>${link?`<span class="book book-booked">✅ ${esc(hotels[id].name||'已設定')}</span>`:'<span class="book book-todo">⚠️ 尚未設定</span>'}</summary>
+        ${link?`<div class="actions">${navLink(link.dir,'🏨 導航到住宿')}<button class="button secondary" data-action="driver-card" data-city="${id}">🚕 給司機看</button>${navLink(link.pin,'地圖位置 ↗','inline-link')}</div>`:''}
+        ${auto?'<p class="caption">目前使用同行資料包裡的住宿資料；在下方填寫可以覆蓋。</p>':''}
+        <form data-lodging-form data-city="${id}" class="lodging-form"><label class="field-label">住宿名稱<input name="name" maxlength="80" value="${esc(h.name||'')}" placeholder="例如：公寓或飯店名稱"></label><label class="field-label">地址<input name="address" maxlength="160" value="${esc(h.address||'')}" placeholder="Calle …, número, ciudad"></label><label class="field-label">Google 地圖連結（可選）<input name="url" maxlength="400" inputmode="url" value="${esc(h.url||'')}" placeholder="https://maps.app.goo.gl/…"></label><button class="button primary" type="submit">儲存${name}住宿</button></form>
+      </details>`;}).join('')}
+    <p class="caption">住宿資料只存在這支手機${teamSync.enabled?'與你們的團隊同步資料庫':''}，不會放到公開網站上。</p></section>`;
+}
+// Big one-tap buttons for the moments you just need to get somewhere.
+function quickNav(current,next) {
+  const target=[next,current].find(e=>e&&['place','airport','route','hotel','choice'].includes(whereIs(e).kind));
+  const city=currentCityId(data().days.find(d=>d.date===dateInZone(now()))||selectedDay()), hotel=hotelLink(hotelsByCity()[city]);
+  const r=target&&whereIs(target);
+  const go=r?(r.kind==='choice'?r.options.map(o=>navLink(o.dir,`🧭 ${esc(o.name)}`,'quick-btn')).join(''):navLink(r.dir,`🧭 下一站<small>${esc(String(r.name||activityTitle(target)).split(/[（(｜]/)[0])}</small>`,'quick-btn')):'';
+  const home=hotel?`${navLink(hotel.dir,`🏨 回住宿<small>${esc(CITY_NAMES[city]||'')}</small>`,'quick-btn')}<button class="quick-btn" data-action="driver-card" data-city="${city}">🚕 給司機看<small>住宿地址</small></button>`:(city?`<button class="quick-btn" data-action="lodging-setup" data-city="${city}">🏨 設定住宿<small>${esc(CITY_NAMES[city]||'')}</small></button>`:'');
+  return go||home?`<div class="quick-nav">${go}${home}</div>`:'';
+}
+function bookingCard() {
+  const list=bookingOverview(data());
+  const groups=[['todo','⚠️ 尚未訂位，記得處理'],['unconfirmed','❔ 未確認訂位'],['walkin','🚶 不能訂位，現場排隊'],['booked','✅ 已訂位'],['open','🙂 免訂位・直接去']];
+  const counts=Object.fromEntries(groups.map(([k])=>[k,list.filter(x=>x.kind===k).length]));
+  return `<section class="settings-card booking-card"><h2>🍽️ 餐廳訂位總覽</h2><div class="book-summary">${groups.slice(0,4).map(([k,l])=>`<span class="book book-${k}">${l.split(' ')[0]} ${counts[k]}</span>`).join('')}</div>
+    ${groups.filter(([k])=>counts[k]).map(([k,l])=>`<details ${k==='todo'||k==='unconfirmed'?'open':''}><summary>${l}（${counts[k]}）</summary><ul class="book-list">${list.filter(x=>x.kind===k).map(x=>`<li><button class="text-button" data-action="day" data-date="${x.date}">${x.date.slice(5).replace('-','/')} ${esc(x.time)}</button><span><b>${esc(x.en)}</b><small>${esc(x.name)}・${esc(x.category)}</small></span>${navLink(directionsFor(x.mapUrl||''),'🧭','nav-chip')}</li>`).join('')}</ul></details>`).join('')}
+    <p class="caption">依行程備註判斷；實際訂位以餐廳確認信為準。</p></section>`;
+}
 function updatesPanel() {
   const versions = `<p class="caption">行程版本：${esc(data().version)}${state.privateTrip?`<br>同行附件版本：${esc(state.privateTrip.version)}`:''}${state.siteVersion?.sourceCommit?`<br>網站部署：${esc(state.siteVersion.sourceCommit.slice(0,7))}`:''}</p>`;
   return `<section class="settings-card update-settings"><h2>行程更新</h2><p id="sync-status" role="status">${esc(state.syncMessage)}</p><button class="button primary" data-action="sync" ${state.syncing?'disabled':''}>${state.syncing?'正在檢查…':'檢查並更新行程'}</button>${state.shellUpdate?'<button class="button secondary" data-action="apply-shell">開啟新版畫面</button>':''}${versions}${data().hasNewerItinerary?'<p class="notice">行程已套用網站最新版。票券與私人提醒仍保留原同行包；匯入新版可更新附件及離線路線圖。</p>':''}<p class="caption">連網後會自動檢查公開行程，票券附件繼續保存在這台手機。</p></section>`;
@@ -198,7 +266,7 @@ function updatesPanel() {
 function journey() {
   const d=data(); const updated=d.version.replace(/^(\d{4})-(\d{2})-(\d{2})/,'$1/$2/$3');
   return `<div class="page-heading"><div><p class="eyebrow">ALL THE LITTLE DETAILS</p><h1>旅程的安心小事。</h1></div></div>
-  ${updatesPanel()}${planningReminders()}
+  ${lodgingCard()}${bookingCard()}${updatesPanel()}${planningReminders()}
   <section class="settings-card"><div class="section-heading"><h2>${privateMode()?'同行完整版':'分享行程版'}</h2><span class="badge confirmed">${esc(updated)}</span></div><p>${privateMode()?'你的行程、票券與路線圖已儲存在這台裝置。':'這個版本可分享給親友，瀏覽每日行程與景點導航。'}</p><div class="actions"><button class="button primary" data-action="import">${icon('download')}${state.privateTrip?'匯入新版資料':'匯入同行資料包'}</button>${state.privateTrip?`<button class="button secondary" data-action="mode">切換${privateMode()?'分享行程':'同行完整'}版</button>`:''}</div><p class="caption">同行資料包只在這台裝置讀取，不會上傳。更新時請四位同行者各自匯入最新版。</p></section>
   <section class="settings-card"><h2>帶著旅程離線出發</h2><div class="storage-state"><span class="status-dot ${state.offlineReady?'ready':''}"></span>${state.offlineReady?'行程頁面已可離線開啟':'正在準備離線頁面'}</div><p>${state.privateTrip?'已匯入的附件與路線圖可離線查看。':'先匯入同行資料包，才能離線查看票券附件。'}地圖即時導航與外部網站仍需網路。</p><button class="button secondary" data-action="persist">保留這台手機的離線資料</button><p class="caption">清除瀏覽器資料會移除離線內容；出發前請開飛航模式測試一次。</p></section>
   <section class="settings-card"><h2>加到手機主畫面</h2><p>iPhone：用 Safari 開啟，按分享 → 加入主畫面。Android：用 Chrome 選單 → 安裝應用程式／加到主畫面。</p>${state.installing?'<button class="button primary" data-action="install">安裝到主畫面</button>':''}<p class="caption">正式安裝與離線功能需透過 HTTPS 網址開啟。</p></section>
@@ -249,8 +317,8 @@ function render() {
   window.scrollTo(0,scroll);
 }
 const teamSync=new TeamSync({
-  getState:()=>({wish:state.wish.state,tools:state.tools}),
-  onChange:async()=>{await saveWishes();await saveTools();render();world?.refreshCard();},
+  getState:()=>({wish:state.wish.state,tools:state.tools,lodging:state.lodging}),
+  onChange:async()=>{await saveWishes();await saveTools();await saveSetting('lodging',state.lodging).catch(()=>{});render();world?.refreshCard();},
   onStatus:()=>{const el=$('#team-sync-status');if(el)el.textContent=syncStatusText();},
 });
 function syncStatusText() {
@@ -298,7 +366,7 @@ function placeCard(key, opts={}) {
   for (const v of visits) { if(!byDay.has(v.day.date)) byDay.set(v.day.date,[]); byDay.get(v.day.date).push(v); }
   const visitHtml=[...byDay.values()].map(list=>{
     const day=list[0].day;
-    return `<section class="wc-visit"><div class="wc-when"><span>${esc(dayLabel(day))}</span><button class="text-button" data-action="day" data-date="${day.date}">看當天行程 →</button></div>${list.map(({e,optional})=>`<article class="wc-event"><div class="wc-time">${optional?'有空再去・無固定時間':esc(timeLabel(e))}${e.category?` · ${esc(e.category)}`:''}</div><h3>${esc(optional?(e.displayTitle||e.title):activityTitle(e))}</h3>${badge(e)}${optional?activityDetails({activity:{description:e.description,mustTry:e.mustTry||[],tips:e.note?[e.note]:[],openingHours:e.openingHours}}):activityDetails(e)}<div class="actions">${extLink(e.mapUrl||place?.mapUrl,`${icon('map')}Google 地圖導航`)}${e.ticketPlan?extLink(e.ticketPlan.url,'購票／官方資訊 ↗'):''}${optional?'':ticketAction(e)}</div></article>`).join('')}</section>`;
+    return `<section class="wc-visit"><div class="wc-when"><span>${esc(dayLabel(day))}</span><button class="text-button" data-action="day" data-date="${day.date}">看當天行程 →</button></div>${list.map(({e,optional})=>`<article class="wc-event"><div class="wc-time">${optional?'有空再去・無固定時間':esc(timeLabel(e))}${e.category?` · ${esc(e.category)}`:''}</div><h3>${esc(optional?(e.displayTitle||e.title):activityTitle(e))}</h3>${badge(e)}${optional?'':bookingBadge(e)}${optional?activityDetails({activity:{description:e.description,mustTry:e.mustTry||[],tips:e.note?[e.note]:[],openingHours:e.openingHours}}):activityDetails(e)}<div class="actions">${(navButtons(e)||navLink(directionsFor(place?.mapUrl||''),'🧭 導航路線'))}${e.ticketPlan?extLink(e.ticketPlan.url,'購票／官方資訊 ↗'):''}${optional?'':ticketAction(e)}</div></article>`).join('')}</section>`;
   }).join('');
   const related=wishesForPlace(wishItems(),key);
   const souvenir=key.endsWith('|souvenir');
@@ -316,6 +384,7 @@ async function mountWorld() {
     worldLoading ||= import('./world/world.js');
     const { TravelWorld }=await worldLoading;
     world ||= new TravelWorld({
+      bookingFor:key=>{const rank={booked:0,todo:1,unconfirmed:2,walkin:3};const hits=bookingOverview(data()).filter(x=>x.key===key&&x.kind in rank).sort((x,y)=>rank[x.kind]-rank[y.kind]);return hits[0]||null;},
       dailyWishes:(date,city)=>dailyPicks(wishItems(),state.wish.state,city,date,3), wishDone:id=>!!state.wish.state.done[id], toggleWish:id=>toggleWish(id), cityOf:day=>currentCityId(day),
       getTrip:()=>data(), getDate:()=>selectedDay().date, setDate:setWorldDate, today:()=>dateInZone(now()), now,
       placeCard, wishCount:key=>openWishCount(wishItems(),state.wish.state,key), toast,
@@ -355,6 +424,14 @@ async function loadWishBase() {
   if(state.tab==='wish'||state.tab==='world') render();
 }
 function tab(name) { state.tab=name; state.search=''; state.filter='all'; render();window.scrollTo(0,0);history.replaceState(null,'',`#${name}`); }
+// Full-screen card to show a taxi driver where we are staying.
+function driverCard(city) {
+  const h=hotelsByCity()[city], link=hotelLink(h);
+  if(!link) return toast('請先在「旅程」頁填寫住宿');
+  $('#viewer-title').textContent=`${CITY_NAMES[city]||''}住宿・給司機看`;
+  $('#viewer-body').innerHTML=`<div class="driver-card"><p class="driver-es">Por favor, lléveme a esta dirección:</p><p class="driver-zh">請載我們到這個地址</p>${h.name?`<h2>${esc(h.name)}</h2>`:''}${h.address?`<p class="driver-addr">${esc(h.address)}</p>`:''}<div class="actions">${navLink(link.dir,'🧭 開啟導航')}${navLink(link.pin,'在地圖上看 ↗','button secondary')}</div><p class="caption">${esc(CITY_NAMES[city]||'')} · ${LODGING_DATES[city]||''}</p></div>`;
+  $('#viewer').showModal();
+}
 async function openAsset(id) {
   const a=await read('assets',id);
   if (!a) return toast('找不到此附件，請重新匯入同行資料包。');
@@ -407,6 +484,8 @@ async function action(button) {
   }
   else if (a==='sync-now') {toast('同步中…');const ok=await teamSync.sync();toast(ok?'已和團員同步':teamSync.message);}
   else if (a==='sync-off') {if(!confirm('要在這支手機停用同步嗎？已同步的資料會保留在手機上。'))return;teamSync.disconnect();render();}
+  else if (a==='lodging-setup') {tab('trip');requestAnimationFrame(()=>{const el=document.getElementById(`lodging-${button.dataset.city}`)||document.getElementById('lodging');if(el){el.open=true;el.scrollIntoView({block:'start'});el.querySelector('input')?.focus({preventScroll:true});}});}
+  else if (a==='driver-card') driverCard(button.dataset.city);
   else if (a==='wish-toggle') await toggleWish(button.dataset.id,button);
   else if (a==='wish-vote') {const v=state.wish.state.votes, id=button.dataset.id, m=button.dataset.member; v[id]=(v[id]||[]).includes(m)?v[id].filter(x=>x!==m):[...(v[id]||[]),m]; teamSync.change(`vote:${id}`,v[id]); sfx.play('tap'); await saveWishes(); render();}
   else if (a==='wish-tab') {state.wish.ui.tab=button.dataset.tab;state.wish.ui.gachaPick=null;sfx.play('tap');saveWishUi();render();}
@@ -438,6 +517,13 @@ async function action(button) {
 }
 document.addEventListener('click', e => {const b=e.target.closest('[data-action]');if(b) action(b).catch(error=>{if(error.name!=='AbortError')toast(error.message||'操作未完成，請再試一次');});});
 document.addEventListener('submit', async e => {
+  const lodgingForm=e.target.closest('[data-lodging-form]');
+  if(lodgingForm){e.preventDefault();const city=lodgingForm.dataset.city,fd=new FormData(lodgingForm);
+    const v={name:String(fd.get('name')||'').trim().slice(0,80),address:String(fd.get('address')||'').trim().slice(0,160),url:String(fd.get('url')||'').trim().slice(0,400)};
+    if(v.url&&!/^https:\/\//.test(v.url))return toast('地圖連結需以 https:// 開頭');
+    state.lodging[city]=(v.name||v.address||v.url)?v:null;if(!state.lodging[city])delete state.lodging[city];
+    await saveSetting('lodging',state.lodging).catch(()=>{});teamSync.change(`hotel:${city}`,state.lodging[city]||null);
+    sfx.play('coin');render();toast(`已儲存${CITY_NAMES[city]}住宿，行程裡的住宿都能導航了`);return;}
   const syncForm=e.target.closest('[data-sync-form]');
   if(syncForm){e.preventDefault();const code=new FormData(syncForm).get('code')||'';if(!String(code).trim())return;toast('連線中…');const ok=await teamSync.connect(String(code));render();toast(ok?'🎉 已連線！現在和團員共用願望與分帳':teamSync.message);return;}
   const split=e.target.closest('[data-split-form]');
@@ -512,7 +598,7 @@ if('serviceWorker'in navigator)navigator.serviceWorker.addEventListener('message
 });
 async function boot() {
   try {
-    try {const [p,mode,done,publicTrip,date,wishState,toolsState]=await Promise.all([read('settings','privateTrip'),read('settings','mode'),read('settings','done'),read('settings','publicTrip'),read('settings','selectedDate'),read('settings','wishState'),read('settings','toolsState')]);if(wishState&&typeof wishState==='object')state.wish.state={...emptyWishState(),...wishState};if(toolsState&&typeof toolsState==='object')state.tools={...emptyToolsState(),...toolsState};state.privateTrip=p||null;state.mode=p?(mode||'private'):'share';state.done=new Set(done||[]);state.share=validPublicTrip(publicTrip)?publicTrip:null;state.date=date||null;}catch{toast('瀏覽器儲存無法使用，目前可瀏覽分享行程版。');}
+    try {const [p,mode,done,publicTrip,date,wishState,toolsState,lodging]=await Promise.all([read('settings','privateTrip'),read('settings','mode'),read('settings','done'),read('settings','publicTrip'),read('settings','selectedDate'),read('settings','wishState'),read('settings','toolsState'),read('settings','lodging')]);if(wishState&&typeof wishState==='object')state.wish.state={...emptyWishState(),...wishState};if(toolsState&&typeof toolsState==='object')state.tools={...emptyToolsState(),...toolsState};if(lodging&&typeof lodging==='object')state.lodging=lodging;state.privateTrip=p||null;state.mode=p?(mode||'private'):'share';state.done=new Set(done||[]);state.share=validPublicTrip(publicTrip)?publicTrip:null;state.date=date||null;}catch{toast('瀏覽器儲存無法使用，目前可瀏覽分享行程版。');}
     if(data())render();
     loadWishBase();
     setTimeout(()=>teamSync.sync(),1500);

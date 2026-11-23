@@ -387,7 +387,9 @@ export class TravelWorld {
       const el = document.createElement('div');
       const kind = it.decor ? 'decor' : it.souvenir ? 'souvenir' : it.transport ? 'shop' : (it.r >= 3.6 ? 'landmark' : 'shop');
       el.className = `wl ${kind}`;
-      el.innerHTML = `<span class="wl-num"></span><b>${esc(n?.zh || it.key)}</b><i class="wl-star">★</i>`;
+      const book = this.ctx.bookingFor?.(it.key);
+      const tag = book ? { booked: '✓已訂', todo: '未訂', unconfirmed: '待確認', walkin: '排隊' }[book.kind] : '';
+      el.innerHTML = `<span class="wl-num"></span><b>${esc(n?.zh || it.key)}</b>${tag ? `<i class="wl-book ${book.kind}">${tag}</i>` : ''}<i class="wl-star">★</i>`;
       el.dataset.key = it.key;
       el.addEventListener('click', e => { e.stopPropagation(); sfx.play('select'); this.goToPlace(it.key); });
       host.append(el);

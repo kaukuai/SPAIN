@@ -59,6 +59,14 @@ for (const path of files) {
   assert.ok(allowed.has(extname(path)), `網站中有未支援的附件：${relative(source,path)}`);
   assert.ok(!path.endsWith('.travelpack.json'), '同行資料包不能發佈到網站');
 }
+// Every script, style, page and data file must be in the service-worker list or it breaks offline.
+const swSource = readFileSync(join(source, 'sw.js'), 'utf8');
+const cached = new Set([...swSource.matchAll(/'\.\/([^']*)'/g)].map(m => m[1]));
+for (const path of files) {
+  const rel = relative(source, path).split('\\').join('/');
+  if (rel === 'sw.js' || !/\.(js|css|html|json|webmanifest)$/.test(rel)) continue;
+  assert.ok(cached.has(rel), `離線快取清單（sw.js FILES）缺少 ${rel}`);
+}
 const hash = createHash('sha256');
 for (const path of files) hash.update(relative(source,path)).update(readFileSync(path));
 const version = hash.digest('hex').slice(0,12);

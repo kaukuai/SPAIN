@@ -81,7 +81,7 @@ export class DioramaCamera {
     this.target.lerp(this.goal, k);
     this.dist += (this.goalDist - this.dist) * k;
     this.yaw += (this.goalYaw - this.yaw) * k;
-    const pitch = THREE.MathUtils.lerp(.62, 1.05, (this.dist - this.minDist) / (this.maxDist - this.minDist));
+    const pitch = THREE.MathUtils.lerp(.52, 1.05, (this.dist - this.minDist) / (this.maxDist - this.minDist));
     const h = Math.sin(pitch) * this.dist, r = Math.cos(pitch) * this.dist;
     this.camera.position.set(this.target.x + Math.sin(this.yaw) * r, h, this.target.z + Math.cos(this.yaw) * r);
     this.camera.lookAt(this.target.x, 0, this.target.z);

@@ -15,8 +15,20 @@ const MOSAIC = ['#ff6b6b', '#ffd23f', '#3fc5ff', '#6be675', '#ff9de2', '#ff9a3c'
 export function gable(b, w, h, d, color, o = {}, kind) {
   const s = new THREE.Shape();
   s.moveTo(-w / 2, 0); s.lineTo(w / 2, 0); s.lineTo(0, h); s.closePath();
-  b.group(o, g => g.extrude(s, d, color, { z: -d / 2 }, 0, kind));
+  b.group(o, g => {
+    g.extrude(s, d, color, { z: -d / 2 }, 0, kind);
+    if (kind) return;
+    // clay tile rows on both slopes and a ridge cap
+    const dark = darker(color, .12), ang = Math.atan2(h, w / 2), slope = Math.hypot(w / 2, h);
+    for (const side of [-1, 1]) for (let k = 1; k <= 3; k++) {
+      const f = k / 4;
+      g.box(.07, .06, d + .02, dark, { x: side * (w / 2) * (1 - f), y: h * f - .01, z: -(d + .02) / 2 + (d + .02) / 2, rz: side * -ang + side * Math.PI / 2 - side * Math.PI / 2 });
+    }
+    g.cyl(.09, .09, d + .1, dark, { y: h - .02, z: (d + .1) / 2, rx: -Math.PI / 2 }, 6);
+  });
 }
+const _dc = new THREE.Color();
+export function darker(hex, amt = .1) { const hsl = {}; _dc.set(hex).getHSL(hsl); _dc.setHSL(hsl.h, hsl.s, Math.max(0, hsl.l - amt)); return '#' + _dc.getHexString(); }
 export function hipRoof(b, w, h, d, color, o = {}) { // four-sided pyramid roof
   b.group(o, g => g.group({ sx: w, sz: d }, gg => gg.cyl(.001, .7071, h, color, { ry: Math.PI / 4 }, 4)));
 }

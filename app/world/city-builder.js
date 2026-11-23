@@ -123,7 +123,8 @@ export function buildCity(world, block) {
       }
       ps.forEach((p, i) => {
         const y = heightAt(p.m.x, p.m.z), nx = Math.cos(p.ang), nz = -Math.sin(p.ang);
-        if (w >= 1.7 && i % 2 === 0) b.box(.12, .02, p.len * .5, '#ffffff', { x: p.m.x, z: p.m.z, y: y + .07, ry: p.ang });
+        if (w >= 1.7 && i % 2 === 0 && i % 9 !== 4) b.box(.12, .02, p.len * .5, '#ffffff', { x: p.m.x, z: p.m.z, y: y + .07, ry: p.ang });
+        if (w >= 1.4 && i % 9 === 4) for (let k = -2; k <= 2; k++) b.box(.22, .02, w * .9, '#ffffff', { x: p.m.x + Math.sin(p.ang) * k * .4, z: p.m.z + Math.cos(p.ang) * k * .4, y: y + .07, ry: p.ang + Math.PI / 2 });
         if (road.trees && i % 3 === 1) for (const s of [-1, 1]) { const x = p.m.x + nx * s * (w / 2 + .55), z = p.m.z + nz * s * (w / 2 + .55); if (occFreeLoose(x, z)) tree(b, x, z, .5, block.id === 'sevilla' ? 'orange' : block.id === 'barcelona' && R() > .5 ? 'palm' : 'round', R); }
         if (i % 5 === 2) lamp(b, p.m.x + nx * (w / 2 + .45), p.m.z + nz * (w / 2 + .45), { y });
         if (road.lights && i % 3 === 0) { const x1 = p.m.x + nx * (w / 2 + .5), z1 = p.m.z + nz * (w / 2 + .5), x2 = p.m.x - nx * (w / 2 + .5), z2 = p.m.z - nz * (w / 2 + .5); xmasLights(b, x1, z1, x2, z2, y + 2.6); }
@@ -148,7 +149,8 @@ export function buildCity(world, block) {
     }
   }
 
-  // ---- itinerary + scenery buildings ----
+  // ---- itinerary + scenery buildings (drawn with ink outlines and window frames) ----
+  b.outline = .05;
   for (const it of items) {
     const y = heightAt(it.x, it.z);
     const lm = LANDMARKS[it.key];
@@ -161,6 +163,7 @@ export function buildCity(world, block) {
     const d = doorPoint(it); nav.unblockCircle(d.x, d.z, 1); occMark(d.x, d.z, 1.4);
     it.y = y; it.h = lm?.h || 6.5;
   }
+  b.outline = 0;
 
   // ---- Barcelona's Eixample grid ----
   if (city?.grid) {

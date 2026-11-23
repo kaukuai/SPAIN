@@ -1,9 +1,9 @@
-// Team sync for the wishlist and bill splitting, stored in one Upstash Redis hash.
+// Team sync for the wishlist, hotel locations and bill splitting, stored in one Upstash Redis hash.
 // GET  /api/sync            → { fields: { name: { v, t, by } } }
 // POST /api/sync { fields } → saves only fields newer than what the server has.
 // Both need the header x-team-code to match the TEAM_CODE environment variable.
 const KEY = 'spain-trip:v1';
-const MAX_FIELDS = 120, MAX_VALUE = 4000, FIELD = /^(done|vote|custom|exp):[\w-]{1,60}$/;
+const MAX_FIELDS = 120, MAX_VALUE = 4000, FIELD = /^(done|vote|custom|exp|hotel):[\w-]{1,60}$/;
 
 function redisConfig(env = process.env) {
   if (env.UPSTASH_REDIS_REST_URL && env.UPSTASH_REDIS_REST_TOKEN) return { url: env.UPSTASH_REDIS_REST_URL, token: env.UPSTASH_REDIS_REST_TOKEN };
