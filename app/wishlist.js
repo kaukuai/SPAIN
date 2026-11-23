@@ -11,7 +11,7 @@ export const LEVELS = [
   [0, '見習旅人'], [30, '背包新手'], [80, 'Tapas 學徒'], [150, '廣場常客'], [240, '高第粉絲'], [350, '佛朗明哥之星'], [480, '西班牙通'],
   [640, '美食探險家'], [820, '城市漫遊大師'], [1050, '傳說旅行團'], [1300, '西班牙榮譽市民'],
 ];
-export const CATEGORIES = [['all', '全部'], ['景點', '🏛️ 景點'], ['美食', '🍴 美食'], ['飲品', '🍷 飲品'], ['購物', '🛍️ 逛街'], ['伴手禮', '🎁 伴手禮'], ['體驗', '🎟️ 體驗'], ['散步', '🚶 散步'], ['拍照', '📸 拍照']];
+export const CATEGORIES = [['all', '全部'], ['景點', '🏛️ 景點'], ['美食', '🍴 美食'], ['飲品', '🍷 飲品'], ['購物', '🛍️ 逛街'], ['伴手禮', '🎁 伴手禮'], ['體驗', '🎟️ 體驗'], ['散步', '🚶 散步'], ['拍照', '📸 拍照'], ['地點成就', '📍 地點成就']];
 const FOUR = ['madrid', 'sevilla', 'granada', 'barcelona'];
 const esc = s => String(s ?? '').replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
 
@@ -77,10 +77,12 @@ export function badges(items, state) {
     { id: 'gaudi', icon: '🦎', name: '高第迷', desc: '完成所有高第建築願望', got: gaudi.length > 0 && gaudi.every(done) },
     { id: 'photo', icon: '📸', name: '攝影師之眼', desc: '完成 6 個拍照任務', got: count(i => i.tags?.includes('拍照')) >= 6 },
     { id: 'nye', icon: '🍇', name: '跨年好運', desc: '跨年吃下 12 顆葡萄', got: !!state.done['bcn-grapes'] },
+    { id: 'spots', icon: '📍', name: '地點成就家', desc: '完成 10 個景點或餐廳的地點成就', got: count(i => i.quest) >= 10 },
+    { id: 'spot-food', icon: '🍽️', name: '必點達人', desc: '完成 8 個餐廳的地點成就', got: count(i => i.quest && i.tags?.includes('美食')) >= 8 },
     { id: 'team', icon: '🤝', name: '全員參與', desc: 'holyman、勳、ㄓㄒ、33 都投過「想要」', got: PARTY.every(m => voters.has(m.id)) },
   ];
   for (const c of WISH_CITIES.slice(0, 4)) {
-    const cityDo = items.filter(i => i.type === 'do' && i.cities?.length === 1 && i.cities[0] === c.id);
+    const cityDo = items.filter(i => i.type === 'do' && !i.quest && i.cities?.length === 1 && i.cities[0] === c.id);
     list.push({ id: `city-${c.id}`, icon: '🏅', name: `${c.name}制霸`, desc: `完成只在${c.name}的 ${cityDo.length} 件事`, got: cityDo.length > 0 && cityDo.every(done) });
   }
   return list;
@@ -104,7 +106,7 @@ export function pickGacha(items, state, city, random = Math.random) {
 
 // A small, stable set of open wishes for one city on one day (used by 現在, 行程 and the 3D quest).
 export function dailyPicks(items, state, city, date, n = 3) {
-  const open = items.filter(i => !state.done[i.id] && inCity(i, city));
+  const open = items.filter(i => !state.done[i.id] && !i.quest && inCity(i, city));
   const seed = [...`${date}${city}`].reduce((a, c) => (a * 31 + c.charCodeAt(0)) >>> 0, 7);
   const specific = open.filter(i => i.cities.length < 4), shared = open.filter(i => i.cities.length === 4);
   const order = list => list.map((i, k) => [((seed ^ (k * 2654435761)) >>> 0) % 9973, i]).sort((a, b) => a[0] - b[0]).map(x => x[1]);
@@ -139,7 +141,7 @@ export function wishCard(item, state, compact = false) {
   return `<article class="wish ${done ? 'done' : ''} ${item.type}" style="--c:${cityColor(item.city)}" id="wish-${esc(item.id)}">
     <div class="wish-emoji">${esc(item.emoji)}</div>
     <div class="wish-main">
-      <div class="wish-meta">${item.no ? `<span class="wish-no">#${item.no}</span>` : ''}${cityTags(item)}<span>${item.type === 'buy' ? '伴手禮' : '想做的事'}</span><span class="wish-pts">+${esc(item.points)} XP</span>${item.custom ? '<span>我新增</span>' : ''}</div>
+      <div class="wish-meta">${item.no ? `<span class="wish-no">#${item.no}</span>` : ''}${cityTags(item)}<span>${item.type === 'buy' ? '伴手禮' : item.quest ? '📍 地點成就' : '想做的事'}</span><span class="wish-pts">+${esc(item.points)} XP</span>${item.custom ? '<span>我新增</span>' : ''}</div>
       <h3>${esc(item.title)}</h3>
       ${item.note && !compact ? `<p>${esc(item.note)}</p>` : ''}
       ${compact ? '' : votesHtml(item, state)}
@@ -189,7 +191,7 @@ export function wishPage(base, state, ui) {
       </div>`;
     const searching = !!String(ui.q || '').trim();
     const list = filterWishes(items, state, searching ? { q: ui.q, hideDone: ui.hideDone } : { city, cat, hideDone: ui.hideDone });
-    const groups = [['', list.filter(i => i.no)], ['✨ 補充推薦', list.filter(i => !i.no && !i.custom)], ['📝 我們新增的', list.filter(i => i.custom)]];
+    const groups = [['', list.filter(i => i.no)], ['📍 地點成就（到了那個景點或餐廳就能完成）', list.filter(i => i.quest)], ['✨ 補充推薦', list.filter(i => !i.no && !i.custom && !i.quest)], ['📝 我們新增的', list.filter(i => i.custom)]];
     const render = arr => view === 'cards' ? `<div class="wish-list">${arr.map(i => wishCard(i, state)).join('')}</div>` : `<div class="wrows">${arr.map(i => wishRow(i, state)).join('')}</div>`;
     body = controls + `<p class="wish-count">${searching ? '🔍 搜尋全部城市與分類・' : ''}顯示 ${list.length} 項・已完成 ${list.filter(i => state.done[i.id]).length}</p>${gacha}` +
       (list.length ? groups.filter(([, arr]) => arr.length).map(([title, arr]) => `${title ? `<h3 class="wish-sub">${title}</h3>` : ''}${render(arr)}`).join('') : '<p class="caption">沒有符合的願望，換個城市或分類看看，或從下方新增一個！</p>');

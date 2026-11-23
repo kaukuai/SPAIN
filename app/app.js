@@ -9,6 +9,7 @@ import { emptyWishState, validWishData, allWishes, wishPage, wishesForPlace, wis
 import { sfx } from './world/sfx.js';
 import { TeamSync } from './sync.js';
 import { LODGING, lodgingKey } from './lodging-data.js';
+import { guideFor, guideQuests } from './place-guide.js';
 import { locate, eventCity, bookingStatus, bookingOverview, hotelLink, directionsFor, CITY_NAMES } from './navigation.js';
 import { PARTY } from './world/team.js';
 import { emptyToolsState, toolsPage, makeExpense, settleText, fetchToolWeather, fetchRate } from './tools.js';
@@ -126,15 +127,52 @@ function bookingBadge(e) {
 function eventActions(e) {
   return `<div class="actions">${navButtons(e)}${e.ticketPlan?extLink(e.ticketPlan.url,'購票／官方資訊 ↗'):''}${ticketAction(e)}</div>`;
 }
+// Must-eat dishes / sight introduction and the achievements that can be stamped here.
+const PLACEHOLDER_TRY=/目前未確認|尚未核實固定|未指定必點|未指定固定必點|依當日菜單現場選擇|未核實店家|依當日出爐|尚未核實固定必點/;
+function placeKeyOf(e){ return e?.venue&&!e.mealOptions?.length?venueKey(e.venue):null; }
+function questRow(i){
+  const d=!!state.wish.state.done[i.id];
+  return `<div class="quest-row ${d?'done':''}" id="quest-${esc(i.id)}"><span class="qr-emoji">${esc(i.emoji)}</span><div class="qr-main"><b>${esc(i.title)}</b><small>${i.no?`100 件事 #${i.no}`:'📍 地點成就'} · +${esc(i.points)} XP</small></div><button class="qr-check" data-action="wish-toggle" data-id="${esc(i.id)}" aria-pressed="${d}" aria-label="${d?'取消完成':'完成'}：${esc(i.title)}">${d?'<span class="stamp">¡HECHO!</span>':'完成'}</button></div>`;
+}
+function questsHtml(key){
+  const items=key?wishesForPlace(wishItems(),key):[]; if(!items.length) return '';
+  const done=items.filter(i=>state.wish.state.done[i.id]).length;
+  return `<div class="guide-quests"><h4>🏆 在這裡可以完成的成就 <small>${done}/${items.length}</small></h4>${items.map(questRow).join('')}<p class="caption">完成就按「完成」蓋章，團隊同步後大家都看得到。</p></div>`;
+}
+function guideHtml(key, withQuests=true){
+  const g=key&&guideFor(key);
+  const li=(arr,pre='')=>arr?.length?`<ul class="guide-list">${arr.map(t=>`<li>${pre}${esc(t)}</li>`).join('')}</ul>`:'';
+  let body='';
+  if(g?.kind==='food'){
+    const src=(g.src||[]).map((u,i)=>extLink(u,`來源${i+1} ↗`,'inline-link')).join(' ');
+    body=`<div class="guide guide-food"><h4>🍽️ 必點必吃 <small>網路評論整理</small></h4><p class="guide-intro">${esc(g.intro)}</p><ol class="must-eat">${g.eat.map(([zh,es,why])=>`<li><b>${esc(zh)}</b><span class="es" lang="es">${esc(es)}</span>${why?`<small>${esc(why)}</small>`:''}</li>`).join('')}</ol>${li(g.tips,'💡 ')}<p class="guide-src">${g.thin?'這家網路資料較少，部分是同類店家的通用點法。':'整理自網路評論與美食指南。'}菜單、價格以現場為準；西文菜名可以直接指給店員看。${src}</p></div>`;
+  } else if(g?.kind==='sight'){
+    body=`<div class="guide guide-sight"><h4>📖 景點介紹</h4><p class="guide-intro">${esc(g.intro)}</p>${g.see?.length?`<h5>👀 不要錯過</h5>${li(g.see)}`:''}${g.facts?.length?`<h5>💡 小知識</h5>${li(g.facts)}`:''}</div>`;
+  }
+  return body+(withQuests?questsHtml(key):'');
+}
+function guideSummary(e){
+  const g=guideFor(placeKeyOf(e)); const open=placeKeyOf(e)?wishesForPlace(wishItems(),placeKeyOf(e)).filter(i=>!state.wish.state.done[i.id]).length:0;
+  const what=g?.kind==='food'?'必點美食':g?.kind==='sight'?'景點介紹':'活動資訊';
+  return `${what}${open?'、成就':''}、提醒與連結`;
+}
+function questChip(e){
+  const key=placeKeyOf(e); if(!key) return '';
+  const items=wishesForPlace(wishItems(),key); if(!items.length) return '';
+  const open=items.filter(i=>!state.wish.state.done[i.id]).length;
+  return `<span class="quest-chip ${open?'':'all-done'}" title="這裡可以完成的成就">🏆 ${open?`${open} 個成就`:'成就全完成'}</span>`;
+}
 function activityDetails(e) {
   const info=e.activity||{};
+  const key=placeKeyOf(e), g=guideFor(key);
+  const mustTry=g?.kind==='food'?(info.mustTry||[]).filter(x=>!PLACEHOLDER_TRY.test(x)):info.mustTry;
   const list=(items,label)=>items?.length?`<div class="activity-block"><h4>${label}</h4><ul>${items.map(item=>`<li>${esc(item)}</li>`).join('')}</ul></div>`:'';
   const choices=e.mealOptions?.length?`<div class="meal-options"><h4>已訂午餐・兩間擇一</h4>${e.mealOptions.map(option=>`<article class="meal-option"><h4>${esc(option.title)}</h4><p>${esc(option.displayTime)}</p>${badge(option)}${bookingBadge({...option,category:e.category})}${activityDetails(option)}<div class="actions">${navLink(directionsFor(option.mapUrl),'🧭 導航到這間')}${navLink(option.mapUrl,'地圖位置 ↗','inline-link')}</div></article>`).join('')}</div>`:'';
-  return `<div class="activity-details">${info.description?`<div class="activity-block"><h4>活動資訊</h4><p>${esc(info.description)}</p></div>`:''}${choices}${list(info.highlights,'參觀重點')}${list(info.mustTry,'必點／推薦')}${info.openingHours?`<div class="activity-block"><h4>營業資訊</h4><p>${esc(info.openingHours)}</p></div>`:''}${list(info.tips,'注意事項')}${info.photoTip?`<div class="activity-block"><h4>拍照提示</h4><p>${esc(info.photoTip)}</p></div>`:''}</div>`;
+  return `<div class="activity-details">${info.description?`<div class="activity-block"><h4>活動資訊</h4><p>${esc(info.description)}</p></div>`:''}${choices}${guideHtml(key)}${list(info.highlights,'參觀重點')}${list(mustTry,g?.kind==='food'?'我們這餐的計畫':'必點／推薦')}${info.openingHours?`<div class="activity-block"><h4>營業資訊</h4><p>${esc(info.openingHours)}</p></div>`:''}${list(info.tips,'注意事項')}${info.photoTip?`<div class="activity-block"><h4>拍照提示</h4><p>${esc(info.photoTip)}</p></div>`:''}</div>`;
 }
 function optionalStops(day, stops=(day.optionalStops||[]).filter(stop=>!stop.beforeEventId&&!stop.afterEventId), anchored=false) {
   if(!stops.length)return '';
-  return `<aside class="optional-stops ${anchored?'anchored-stops':''}" aria-label="無固定時間的備選地點"><h3>${anchored?'順路備選・不指定時間':'附近備選・有空再去'}</h3><p class="caption">沒有安排固定時間，順路、有空再選。</p>${stops.map(stop=>`<article class="optional-stop" ${stop.id?`id="stop-${esc(stop.id)}"`:''}><span class="optional-label">彈性地點</span><h3>${esc(stop.displayTitle||stop.title)}</h3>${badge(stop)}<p>${esc(stop.description||stop.note)}</p>${stop.openingHours?`<p class="optional-hours">營業：${esc(stop.openingHours)}</p>`:''}<details><summary>店家資訊與注意事項</summary>${activityDetails({activity:{mustTry:stop.mustTry||[],tips:stop.note?[stop.note]:[]}})}${navLink(directionsFor(stop.mapUrl),'🧭 導航到這裡')}${navLink(stop.mapUrl,'地圖位置 ↗','inline-link')}${stop.reminderId?`<button class="file-button" data-action="calendar" data-id="${esc(stop.reminderId)}">下載訂位提醒</button>`:''}</details></article>`).join('')}</aside>`;
+  return `<aside class="optional-stops ${anchored?'anchored-stops':''}" aria-label="無固定時間的備選地點"><h3>${anchored?'順路備選・不指定時間':'附近備選・有空再去'}</h3><p class="caption">沒有安排固定時間，順路、有空再選。</p>${stops.map(stop=>`<article class="optional-stop" ${stop.id?`id="stop-${esc(stop.id)}"`:''}><span class="optional-label">彈性地點</span><h3>${esc(stop.displayTitle||stop.title)}</h3>${badge(stop)}<p>${esc(stop.description||stop.note)}</p>${stop.openingHours?`<p class="optional-hours">營業：${esc(stop.openingHours)}</p>`:''}<details><summary>${guideFor(placeKeyOf(stop))?.kind==='food'?'🍽️ 必點美食、':''}店家資訊與注意事項</summary>${activityDetails({venue:stop.venue,activity:{mustTry:stop.mustTry||[],tips:stop.note?[stop.note]:[]}})}${navLink(directionsFor(stop.mapUrl),'🧭 導航到這裡')}${navLink(stop.mapUrl,'地圖位置 ↗','inline-link')}${stop.reminderId?`<button class="file-button" data-action="calendar" data-id="${esc(stop.reminderId)}">下載訂位提醒</button>`:''}</details></article>`).join('')}</aside>`;
 }
 function anchoredStops(day,event,before) {
   return optionalStops(day,(day.optionalStops||[]).filter(stop=>(before?stop.beforeEventId:stop.afterEventId)===event.id),true);
@@ -144,7 +182,7 @@ const cityColor=text=>(CITY_COLORS.find(([k])=>String(text).includes(k))||[,'#9d
 const cityEmoji=text=>(CITY_COLORS.find(([k])=>String(text).includes(k))||[,,'📍'])[2];
 function cityEntry(entry) {
   const e=entry.stop;
-  if(entry.kind==='optional')return `<details class="city-stop optional"><summary><span class="city-stop-meta">有空再去・無固定時間</span><strong>${esc(e.displayTitle||e.title)}</strong></summary>${badge(e)}<p class="caption">${esc(e.description||e.note)}</p>${e.openingHours?`<p class="caption">${esc(e.openingHours)}</p>`:''}${activityDetails({activity:{mustTry:e.mustTry||[],tips:e.note?[e.note]:[]}})}<div class="actions">${navLink(directionsFor(e.mapUrl),'🧭 導航到這裡')}${navLink(e.mapUrl,'地圖位置 ↗','inline-link')}</div></details>`;
+  if(entry.kind==='optional')return `<details class="city-stop optional"><summary><span class="city-stop-meta">有空再去・無固定時間</span><strong>${esc(e.displayTitle||e.title)}</strong></summary>${badge(e)}<p class="caption">${esc(e.description||e.note)}</p>${e.openingHours?`<p class="caption">${esc(e.openingHours)}</p>`:''}${activityDetails({venue:e.venue,activity:{mustTry:e.mustTry||[],tips:e.note?[e.note]:[]}})}<div class="actions">${navLink(directionsFor(e.mapUrl),'🧭 導航到這裡')}${navLink(e.mapUrl,'地圖位置 ↗','inline-link')}</div></details>`;
   return `<details class="city-stop kind-${eventKind(e)}"><summary><span class="city-stop-meta">${esc(timeLabel(e))} · ${esc(e.category)}${e.conditional?' · 彈性':''}</span><strong>${esc(e.overviewTitle)}</strong>${bookingBadge(e)}</summary>${badge(e)}${activityDetails(e)}${eventActions(e)}</details>`;
 }
 function citySection() {
@@ -217,7 +255,7 @@ function itinerary() {
   <div class="timeline">${day.events.map(e => {
     const active=Date.parse(e.start)<=Number(t)&&Number(t)<Date.parse(e.end); const done=state.done.has(e.id);
     const zoneLabel=z=>z==='Asia/Taipei'?'台灣':z==='Asia/Shanghai'?'上海':'西班牙';
-    return `${anchoredStops(day,e,true)}<article class="timeline-event kind-${eventKind(e)} ${active?'current':''} ${done?'completed':''}" id="event-${esc(e.id)}"><div class="time-rail"><strong>${eventClock(e)}</strong>${e.timezone?`<span class="rail-zone">${zoneLabel(e.timezone)}</span>`:''}<small>${e.end.slice(0,10)!==e.start.slice(0,10)?shortDate(e.end.slice(0,10))+' ':''}${eventClock(e,true)}</small>${e.isFlight?`<span class="rail-zone">${zoneLabel(e.endTimezone||e.timezone)}</span>`:''}<span class="timeline-dot"></span></div><div class="event-content"><div class="event-meta"><span>${e.lodgingAction?'住宿':esc(e.category)}</span>${active?'<span class="live-label">此刻</span>':''}${done?'<span>已標記完成</span>':''}${bookingBadge(e)}${navChip(e)}</div><h3>${esc(activityTitle(e))}</h3>${badge(e)}<details><summary>活動資訊、提醒與連結</summary>${activityDetails(e)}${e.note?`<div class="activity-block private-note"><h4>同行提醒</h4><p>${esc(e.note)}</p></div>`:''}${e.transport?`<p class="caption">${esc(e.transport)}</p>`:''}${eventActions(e)}${extLink(e.infoUrl,'官方資訊 ↗','inline-link')}<button class="text-button" data-action="done" data-id="${esc(e.id)}">${done?'取消完成標記':'標記完成'}</button></details></div></article>${anchoredStops(day,e,false)}`;
+    return `${anchoredStops(day,e,true)}<article class="timeline-event kind-${eventKind(e)} ${active?'current':''} ${done?'completed':''}" id="event-${esc(e.id)}"><div class="time-rail"><strong>${eventClock(e)}</strong>${e.timezone?`<span class="rail-zone">${zoneLabel(e.timezone)}</span>`:''}<small>${e.end.slice(0,10)!==e.start.slice(0,10)?shortDate(e.end.slice(0,10))+' ':''}${eventClock(e,true)}</small>${e.isFlight?`<span class="rail-zone">${zoneLabel(e.endTimezone||e.timezone)}</span>`:''}<span class="timeline-dot"></span></div><div class="event-content"><div class="event-meta"><span>${e.lodgingAction?'住宿':esc(e.category)}</span>${active?'<span class="live-label">此刻</span>':''}${done?'<span>已標記完成</span>':''}${bookingBadge(e)}${questChip(e)}${navChip(e)}</div><h3>${esc(activityTitle(e))}</h3>${badge(e)}<details><summary>${guideSummary(e)}</summary>${activityDetails(e)}${e.note?`<div class="activity-block private-note"><h4>同行提醒</h4><p>${esc(e.note)}</p></div>`:''}${e.transport?`<p class="caption">${esc(e.transport)}</p>`:''}${eventActions(e)}${extLink(e.infoUrl,'官方資訊 ↗','inline-link')}<button class="text-button" data-action="done" data-id="${esc(e.id)}">${done?'取消完成標記':'標記完成'}</button></details></div></article>${anchoredStops(day,e,false)}`;
   }).join('')}${optionalStops(day)}</div>${wishPicksHtml(day,'🌟 這天在{city}還可以')}`;
 }
 function tickets() {
@@ -348,8 +386,10 @@ async function loadToolWeather() {
   try { state.toolsLive.weather=await fetchToolWeather(dateInZone(now())); } catch { state.toolsLive.weatherFailedAt=Date.now(); } finally { state.toolsLive.weatherLoading=false; }
   if(state.tab==='tools'&&state.toolsLive.weather) render();
 }
-function wishItems() { return allWishes(state.wish.base,state.wish.state); }
-function wishes() { let passport=[];try{passport=JSON.parse(localStorage.getItem('spain-passport')||'[]');}catch{} return wishPage(state.wish.base,state.wish.state,{...state.wish.ui,passport,todayCity:currentCityId(),syncCard:syncCard()}); }
+const PLACE_QUESTS=guideQuests();
+function wishBase() { return {...(state.wish.base||{}),items:[...(state.wish.base?.items||[]),...PLACE_QUESTS]}; }
+function wishItems() { return allWishes(wishBase(),state.wish.state); }
+function wishes() { let passport=[];try{passport=JSON.parse(localStorage.getItem('spain-passport')||'[]');}catch{} return wishPage(wishBase(),state.wish.state,{...state.wish.ui,passport,todayCity:currentCityId(),syncCard:syncCard()}); }
 function saveWishes() { return saveSetting('wishState',state.wish.state).catch(()=>toast('願望進度暫時無法儲存在這台裝置')); }
 const WEEKDAY=['日','一','二','三','四','五','六'];
 function dayLabel(day) { const d=new Date(day.date+'T12:00:00Z'), i=data().days.indexOf(day); return `D${i+1} · ${d.getUTCMonth()+1}/${d.getUTCDate()}（${WEEKDAY[d.getUTCDay()]}）`; }
@@ -369,7 +409,7 @@ function placeCard(key, opts={}) {
     for (const stop of day.optionalStops||[]) if(venueKey(stop.venue)===key) visits.push({day,e:stop,optional:true});
   }
   const place=places[key];
-  const intro=place?.title?`<p class="caption">${esc(place.note||'')}</p>`:'';
+  const intro=(place?.title?`<p class="caption">${esc(place.note||'')}</p>`:'')+guideHtml(key,false);
   const byDay=new Map();
   for (const v of visits) { if(!byDay.has(v.day.date)) byDay.set(v.day.date,[]); byDay.get(v.day.date).push(v); }
   const visitHtml=[...byDay.values()].map(list=>{
@@ -378,7 +418,7 @@ function placeCard(key, opts={}) {
   }).join('');
   const related=wishesForPlace(wishItems(),key);
   const souvenir=key.endsWith('|souvenir');
-  const wishHtml=related.length?`<section class="wc-wishes"><h3>${souvenir?'🎁 這座城市的伴手禮清單':'⭐ 願望清單'}</h3>${related.map(i=>wishCard(i,state.wish.state,true)).join('')}<button class="text-button" data-action="tab" data-tab="wish">打開願望清單 →</button></section>`:'';
+  const wishHtml=related.length?`<section class="wc-wishes"><h3>${souvenir?'🎁 這座城市的伴手禮清單':'🏆 願望與地點成就'}</h3>${related.map(i=>wishCard(i,state.wish.state,true)).join('')}<button class="text-button" data-action="tab" data-tab="wish">打開願望清單 →</button></section>`:'';
   const none=!visits.length&&!souvenir?`<p class="caption">${opts.decor?'這是城市地標，不在行程時間軸上，順路經過可以看看。':'這站不在目前的公開行程時間軸上，可當作順路參考。'}</p>${extLink(place?.mapUrl||`https://www.google.com/maps/search/?api=1&query=${encodeURIComponent((opts.en||key.split('|')[1])+' '+key.split('|')[0])}`,`${icon('map')}Google 地圖`)}`:'';
   const lead=souvenir?'<p class="caption">把在這裡想買的東西一樣一樣蓋章完成吧！清單可以在「願望」頁新增。</p>':'';
   return `${lead}${intro}${wishHtml}${visitHtml}${none}`;
