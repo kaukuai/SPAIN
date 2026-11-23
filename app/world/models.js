@@ -709,6 +709,7 @@ export const LANDMARKS = {
     for (let i = 0; i < 9; i++) { const a = i / 9 * Math.PI * 2, r = 3.6 + R() * .8; tree(b, Math.cos(a) * r, Math.sin(a) * r, .75, 'pine'); }
   } },
   'barcelona|souvenir': { h: 5.5, build: souvenirShop('#3fa7ff', '#ff5a5f') },
+  'madrid|hotel': hotelModel('#7c5cd6'), 'sevilla|hotel': hotelModel('#7c5cd6'), 'granada|hotel': hotelModel('#7c5cd6'), 'barcelona|hotel': hotelModel('#7c5cd6'),
 
   // ===== TRANSPORT =====
   'transport|atocha': { h: 7, build(b) {
@@ -892,6 +893,23 @@ export function tower(b, R, h = 8) {
   b.box(w * .6, .6, w * .6, '#d5dde6', { y: h });
 }
 
+// Our hotel: a tidy block with a glowing HOTEL sign and a bed icon on the roof.
+function hotelModel(color) {
+  return { h: 8, build(b) {
+    b.cyl(3.3, 3.3, .06, '#efe2c6', { y: .01 }, 20);
+    b.box(4.4, 6, 3.6, '#fff4e6', {});
+    b.box(4.6, .3, 3.8, color, { y: 6 });
+    b.box(4.42, 1.3, 3.62, color, {});
+    windows(b, { w: 4, y0: 1.9, rows: 3, cols: 4, z: 1.82, h: .7, ww: .55, rowGap: 1.25 });
+    for (let r = 0; r < 3; r++) b.box(3.9, .08, .35, '#2b2433', { y: 1.75 + r * 1.25, z: 1.95 });
+    b.box(1.2, 1.1, .12, '#9fd9ff', { z: 1.82 }, 'glass');
+    b.box(2.4, .2, 1, color, { y: 1.2, z: 2.2 });
+    b.box(2.6, .7, .14, '#2b2433', { y: 5.15, z: 1.86 });
+    b.box(2.3, .45, .16, '#ffe36b', { y: 5.27, z: 1.88 }, 'light');
+    b.group({ y: 6.35, s: 1.1 }, g => { g.box(1.6, .35, .9, '#ffffff'); g.box(.35, .55, .9, '#8a5a3a', { x: -.8 }); g.sphere(.22, '#ff8fb1', { x: -.45, y: .45, sz: 1.6 }, 8); g.box(1.1, .12, .92, color, { x: .2, y: .35 }); });
+    b.cyl(.06, .06, 2.4, '#cfd5dc', { x: 1.8, y: 6.3, z: -1 }, 6); b.box(1, .6, .05, '#ff5a5f', { x: 2.32, y: 8.05, z: -1 });
+  } };
+}
 function souvenirShop(main, accent) {
   return b => {
     b.box(4, 3.4, 3.2, C.white, {});

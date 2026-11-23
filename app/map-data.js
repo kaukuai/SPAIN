@@ -1,11 +1,12 @@
 import { eventKind, eventClock } from './presentation.js';
 import { places, transportStops } from './map-places.js';
+import { LODGING, lodgingKey } from './lodging-data.js';
 
 export const venueKey = venue => venue ? `${venue.cityId}|${venue.nameEn}` : '';
 export const validCoordinates = value => Array.isArray(value) && value.length === 2 && value.every(Number.isFinite) && Math.abs(value[0]) <= 85 && Math.abs(value[1]) <= 180;
 
 // No live geocoding: locations are checked once, and unknown places keep their Google link.
-// Accommodation names/coordinates are never inferred from the public itinerary.
+// Our hotels come from lodging-data.js (links the team shared), never from imported packs.
 export function dailyMapPlaces(day, catalog = places) {
   const entries = [];
   const positions = new Map(day.events.map((event, index) => [event.id, index]));
@@ -26,7 +27,15 @@ export function dailyMapPlaces(day, catalog = places) {
     });
   };
   for (const [index, event] of day.events.entries()) {
-    if (event.lodgingAction) continue;
+    if (event.lodgingAction) {
+      const hotel = LODGING[event.cityId];
+      if (hotel) entries.push({
+        key: lodgingKey(event.cityId), rank: 2 * index, sourceEventId: event.id, optional: false, choice: false, kind: 'lodging', lodging: true,
+        title: `🏨 ${hotel.name}（我們的住宿）`, coordinates: validCoordinates(hotel.coordinates) ? hotel.coordinates : null, locationNote: '',
+        mapUrl: hotel.url, time: `住宿 ${hotel.nights}`, description: `${hotel.city}住宿：${hotel.name}`, mustTry: [], openingHours: '', status: '', targetId: `event-${event.id}`,
+      });
+      continue;
+    }
     for (const option of event.mealOptions?.length ? event.mealOptions : [event]) {
       add({ ...event, ...option, choice: !!event.mealOptions?.length }, 2 * index, false, event.id);
     }
@@ -47,5 +56,5 @@ export function dailyMapPlaces(day, catalog = places) {
     else if (prior.optional && !entry.optional) seen.set(entry.key, entry);
   }
   let number = 0, flexible = 0;
-  return [...seen.values()].sort((a,b) => a.rank - b.rank).map(entry => ({...entry, label:entry.optional || entry.choice ? `備${++flexible}` : String(++number)}));
+  return [...seen.values()].sort((a,b) => a.rank - b.rank).map(entry => ({...entry, label:entry.lodging ? '宿' : entry.optional || entry.choice ? `備${++flexible}` : String(++number)}));
 }

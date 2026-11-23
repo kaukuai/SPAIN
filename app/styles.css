@@ -655,3 +655,16 @@ dialog{border:3px solid var(--ink);box-shadow:0 8px 0 var(--ink);border-radius:2
 .driver-card h2{font-size:30px;line-height:1.3;margin:6px 0}
 .driver-addr{font:800 26px/1.4 var(--round);background:#fff3c4;border:3px solid var(--ink);border-radius:18px;padding:14px;margin:12px 0}
 .driver-card .actions{justify-content:center}
+/* ===== hotels ===== */
+.tonight{display:flex;align-items:center;gap:8px;background:#f1eaff;border:2.5px solid var(--ink);border-radius:16px;box-shadow:0 3px 0 var(--ink);padding:8px 10px;margin:0 0 12px}
+.tonight>span{font:900 12px var(--round);color:#7c5cd6;white-space:nowrap}
+.tonight b{flex:1;min-width:0;font-size:14px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.tonight .nav-chip{margin-left:0}
+.lodging-card .lodging-city{padding:10px 12px}
+.lodging-head{display:flex;justify-content:space-between;align-items:baseline}
+.lodging-head b{color:#7c5cd6;font-family:var(--round)}
+.lodging-head small{color:var(--muted);font-weight:700}
+.lodging-city h3{font-size:16px;margin:2px 0 4px}
+.driver-sub{font:800 16px var(--round);color:#4f4657;margin-top:-4px}
+.day-map-marker.kind-lodging>span{background:#7c5cd6;font-size:13px}
+.wl.hotel{background:#efe6ff;font-size:12px}

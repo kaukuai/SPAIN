@@ -2,6 +2,7 @@
 // Islands follow each city's real municipal outline; buildings sit at their real
 // (zoomed) positions and are nudged apart only as much as needed to fit.
 import { places } from '../map-places.js';
+import { LODGING, lodgingKey } from '../lodging-data.js';
 import { CITIES, TAIWAN, DECOR, project, projectPath, chaikin, pointInPolygon, distToPolygonEdge, closestOnPolygon } from './geo.js';
 
 export const CITY_ORDER = ['madrid', 'sevilla', 'granada', 'barcelona'];
@@ -84,6 +85,7 @@ export function worldLayout(catalog = places) {
   }
   for (const [key, d] of Object.entries(DECOR)) add({ key, city: cityOf(key), r: d.r, coords: d.at, decor: true });
   for (const city of CITY_ORDER) add({ key: souvenirKey(city), city, r: 2.6, coords: null, souvenir: true });
+  for (const city of CITY_ORDER) if (LODGING[city]) add({ key: lodgingKey(city), city, r: 3.2, coords: LODGING[city].coordinates, hotel: true });
 
   for (const id of Object.keys(BLOCKS)) {
     const block = BLOCKS[id];

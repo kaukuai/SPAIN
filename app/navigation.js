@@ -23,7 +23,8 @@ export const directionsFor = url => { const q = queryOf(url); return q ? dirUrl(
 export function hotelLink(h) {
   if (!h) return null;
   const url = String(h.url || '').trim();
-  if (/^https:\/\//.test(url)) return { pin: url, dir: directionsFor(url) };
+  const named = [h.name, h.address || h.city].map(x => String(x || '').trim()).filter(Boolean).join(' ');
+  if (/^https:\/\//.test(url)) return { pin: url, dir: h.coordinates ? dirUrl(`${h.coordinates[0]},${h.coordinates[1]}`) : h.name ? dirUrl(named) : directionsFor(url) };
   const q = [h.name, h.address].map(s => String(s || '').trim()).filter(Boolean).join(' ');
   return q ? { pin: searchUrl(q), dir: dirUrl(q) } : null;
 }

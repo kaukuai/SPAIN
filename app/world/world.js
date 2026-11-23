@@ -13,6 +13,7 @@ import { Traffic, Boats, Birds, Precipitation, Fireworks, Coins, fetchWeather, w
 import { QUIZ } from './quiz.js';
 import { dailyMapPlaces, venueKey } from '../map-data.js';
 import { places } from '../map-places.js';
+import { LODGING, lodgingKey } from '../lodging-data.js';
 
 const esc = s => String(s ?? '').replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
 const WEEK = ['日', '一', '二', '三', '四', '五', '六'];
@@ -34,6 +35,7 @@ const ARRIVE_LINES = {
   sight: ['到了！大家集合拍照！', '哇～比照片還壯觀！', '旗子舉高，來張團體照！'],
   transport: ['車站到了，票拿好！', '準備出發去下一座城市！'],
   shop: ['來看看伴手禮！', '買買買！清單拿出來！'],
+  home: ['回到住宿了，大家辛苦了！', '先洗個澡休息一下～', '明天的行程確認一下再睡！'],
 };
 const COIN_KEY = 'spain-passport';
 
@@ -283,6 +285,7 @@ export class TravelWorld {
     }
     for (const [key, p] of Object.entries(places)) if (p.title && !names.has(key)) names.set(key, { zh: p.title.replace(/（.*?）/, ''), en: '', category: '交通' });
     for (const [key, d] of Object.entries(DECOR)) names.set(key, { zh: d.zh, en: d.en, category: '城市地標', decor: true });
+    for (const city of CITY_ORDER) if (LODGING[city]) names.set(lodgingKey(city), { zh: `🏨 ${LODGING[city].name}`, en: `我們的住宿 · ${LODGING[city].nights}`, category: '住宿' });
     for (const city of CITY_ORDER) names.set(souvenirKey(city), { zh: `${BLOCKS[city].name}伴手禮小舖`, en: 'SOUVENIR', category: '願望清單' });
     for (const [key, zh] of Object.entries(LABELS)) if (names.has(key)) names.get(key).zh = zh;
     for (const it of this.layout.items) if (!names.has(it.key)) names.set(it.key, { zh: it.key.split('|')[1], en: '', category: '' });
@@ -385,7 +388,7 @@ export class TravelWorld {
     for (const it of this.layout.items) {
       const n = this.names.get(it.key);
       const el = document.createElement('div');
-      const kind = it.decor ? 'decor' : it.souvenir ? 'souvenir' : it.transport ? 'shop' : (it.r >= 3.6 ? 'landmark' : 'shop');
+      const kind = it.hotel ? 'hotel' : it.decor ? 'decor' : it.souvenir ? 'souvenir' : it.transport ? 'shop' : (it.r >= 3.6 ? 'landmark' : 'shop');
       el.className = `wl ${kind}`;
       const book = this.ctx.bookingFor?.(it.key);
       const tag = book ? { booked: '✓已訂', todo: '未訂', unconfirmed: '待確認', walkin: '排隊' }[book.kind] : '';
@@ -488,7 +491,7 @@ export class TravelWorld {
     for (const L of this.labels) {
       let show;
       if (L.city) show = showCities;
-      else show = L.route || (L.kind === 'souvenir' ? dist < 75 : L.kind === 'decor' ? showDecor : L.kind === 'landmark' ? showLandmarks : showShops) || (L.star && dist < 75);
+      else show = L.route || (L.kind === 'hotel' ? dist < 140 : L.kind === 'souvenir' ? dist < 75 : L.kind === 'decor' ? showDecor : L.kind === 'landmark' ? showLandmarks : showShops) || (L.star && dist < 75);
       if (show) {
         v.copy(L.pos).project(this.camera);
         if (v.z > 1 || Math.abs(v.x) > 1.15 || Math.abs(v.y) > 1.15) show = false;
@@ -875,7 +878,7 @@ export class TravelWorld {
     this.party.leader.facing = Math.PI; this.party.members.forEach(m => { m.facing = Math.PI; });
     this.party.celebrate(); sfx.play('arrive'); navigator.vibrate?.(20);
     this.sparkle(this.party.position.x, this.party.position.y, this.party.position.z);
-    const cat = this.names.get(key)?.category || '', kind = item.transport ? 'transport' : item.souvenir ? 'shop' : /餐|甜點|酒|早|午|晚|採買/.test(cat) ? 'dining' : 'sight';
+    const cat = this.names.get(key)?.category || '', kind = item.hotel ? 'home' : item.transport ? 'transport' : item.souvenir ? 'shop' : /餐|甜點|酒|早|午|晚|採買/.test(cat) ? 'dining' : 'sight';
     const lines = ARRIVE_LINES[kind], who = kind === 'dining' ? this.party.members[2] : kind === 'shop' ? this.party.members[3] : kind === 'sight' ? this.party.members[1] : this.party.leader;
     this.say(who, lines[Math.floor(Math.random() * lines.length)], 2600);
     if (item.r >= 4.5) { this.controls.goalYaw += .3; this.controls.goalDist = Math.min(this.controls.goalDist, 46); }

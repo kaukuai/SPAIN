@@ -57,3 +57,25 @@ test('hotel links and team sync of hotels', () => {
   assert.ok(applyField('hotel:madrid', null, wish, tools, lodging));
   assert.deepEqual(lodging, {});
 });
+
+test('built-in hotels: every entry navigates without any setup, and maps show the hotel', async () => {
+  const { LODGING, lodgingKey } = await import('../app/lodging-data.js');
+  const { dailyMapPlaces } = await import('../app/map-data.js');
+  const box = { madrid: [40.3, 40.6, -3.9, -3.5], sevilla: [37.3, 37.5, -6.1, -5.8], granada: [37.1, 37.3, -3.7, -3.5], barcelona: [41.3, 41.5, 2.0, 2.3] };
+  for (const [city, h] of Object.entries(LODGING)) {
+    const [la0, la1, lo0, lo1] = box[city];
+    assert.ok(h.coordinates[0] > la0 && h.coordinates[0] < la1 && h.coordinates[1] > lo0 && h.coordinates[1] < lo1, `${city} hotel pin is in ${city}`);
+    assert.match(h.url, /^https:\/\/maps\.app\.goo\.gl\//);
+  }
+  for (const day of trip.days) {
+    day.events.forEach((e, i) => assert.ok(!['none', 'hotel-missing'].includes(locate(day, i, LODGING).kind), `${day.date} ${e.displayTitle}`));
+    const cities = new Set(day.events.filter(e => e.lodgingAction).map(e => e.cityId));
+    const pins = dailyMapPlaces(day).filter(p => p.lodging);
+    assert.deepEqual(new Set(pins.map(p => p.key)), new Set([...cities].map(lodgingKey)), day.date);
+    assert.ok(pins.every(p => p.coordinates && p.label === '宿'));
+  }
+  const hotel = locate(trip.days.find(d => d.date === '2026-12-27'), 0, LODGING);
+  assert.equal(hotel.kind, 'hotel');
+  assert.equal(hotel.pin, LODGING.sevilla.url);
+  assert.match(hotel.dir, /destination=37\.378562%2C-5\.9828305/);
+});

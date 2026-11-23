@@ -8,6 +8,7 @@ import { places, transportStops } from './map-places.js';
 import { emptyWishState, validWishData, allWishes, wishPage, wishesForPlace, wishCard, wishRow, openWishCount, pickGacha, dailyPicks, makeCustom, score, levelFor } from './wishlist.js';
 import { sfx } from './world/sfx.js';
 import { TeamSync } from './sync.js';
+import { LODGING, lodgingKey } from './lodging-data.js';
 import { locate, eventCity, bookingStatus, bookingOverview, hotelLink, directionsFor, CITY_NAMES } from './navigation.js';
 import { PARTY } from './world/team.js';
 import { emptyToolsState, toolsPage, makeExpense, settleText, fetchToolWeather, fetchRate } from './tools.js';
@@ -86,13 +87,13 @@ function ticketAction(e) {
   return privateMode() && e.ticketIds?.length ? `<button class="button secondary" data-action="event-tickets" data-ids="${esc(e.ticketIds.join(','))}">${icon('ticket')}票券</button>` : '';
 }
 // ---- navigation: every entry gets a way to its place (venue, hotel, next stop or airport)
+// Our hotels are built in (lodging-data.js); an imported companion pack can add the street address.
 function hotelsByCity() {
   const out={};
   for (const [id,name] of Object.entries(CITY_NAMES)) {
-    const mine=state.lodging[id];
-    if (mine&&(mine.name||mine.address||mine.url)) { out[id]=mine; continue; }
     const h=(state.privateTrip?.hotels||[]).find(x=>String(x.city||'').includes(name));
-    if (h) out[id]={name:h.name,address:h.address,url:h.mapUrl||''};
+    if (LODGING[id]) out[id]={...LODGING[id],address:h?.address||''};
+    else if (h) out[id]={name:h.name,address:h.address,url:h.mapUrl||''};
   }
   return out;
 }
@@ -209,6 +210,7 @@ function itinerary() {
   const day=selectedDay();const t=now();
   return `<div class="page-heading"><div><p class="eyebrow">ONE DAY AT A TIME</p><h1>每天，都有好風景。</h1></div></div>${dayPicker()}
   <div class="day-heading"><div><p>D${data().days.indexOf(day)+1} · ${esc(day.city)}</p><h2>${esc(day.title)}</h2></div>${privateMode() && day.mapAsset ? `<button class="icon-button" data-action="asset" data-id="${day.mapAsset}" aria-label="開啟當日離線路線圖">${icon('map')}</button>`:''}</div>
+  ${tonightHotel(day)}
   <div id="daily-map-slot"></div>
   <p class="caption">${day.timezone==='Asia/Taipei'?'本日顯示台灣／上海當地時間':'西班牙行程顯示當地時間；跨國航班依起降機場時間'} · 導航需連線</p><div class="timeline-legend"><span class="legend-dining">餐廳／餐飲</span><span class="legend-lodging">住宿／返回飯店</span></div>
   ${day.offlineMapNeedsUpdate?'<p class="caption map-update-note">本日路線已調整，請匯入新版同行包以更新離線路線圖；景點導航已使用最新行程。</p>':''}
@@ -231,16 +233,17 @@ function tickets() {
   <p class="caption">「開啟附件」可離線使用；Drive 與官方網站需連線。</p><div class="ticket-grid">${filtered.map(t=>`<article class="ticket-card"><div class="ticket-top"><span>${esc(t.date ? shortDate(t.date):'航程')}</span>${badge(t)}</div><h2>${esc(t.title)}</h2><p class="ticket-time">${esc(t.time)}</p>${t.report?`<p class="caption">報到／到站：${esc(t.report)}</p>`:''}${t.id==='K17'?(t.price?`<div class="price-note">先前提供總額 <strong>€${esc(t.price.user_reported_total_eur)}</strong><small>票面合計€${esc(t.price.face_total_eur)}，差€${esc(t.price.price_difference_eur)}待核對；原票已取得。</small></div>`:'<div class="price-note">四人合計 <strong>€100.75</strong><small>使用者確認已購 · 原票待補</small></div>'):''}<div class="ticket-cut"></div><details ${t.statusKind==='warning'?'open':''}><summary>注意事項與附件${t.files.length?' · '+t.files.length+' 份':''}</summary><p>${esc(t.note)}</p>${t.files.length?`<ul class="file-list">${t.files.map(f=>`<li><span>${esc(f.label)}</span><div>${f.assetId?`<button class="file-button" data-action="asset" data-id="${f.assetId}">開啟附件</button>`:''}${extLink(f.url,'Drive ↗','inline-link')}</div></li>`).join('')}</ul>`:'<p class="caption">目前沒有可出示的原始附件。</p>'}${extLink(t.url,t.statusKind==='warning'?'查看訂位／購票入口 ↗':'開啟來源 ↗','inline-link')}</details></article>`).join('')||'<div class="empty-state"><p>沒有符合的票券，試試其他關鍵字。</p></div>'}</div>`;
 }
 const LODGING_DATES={madrid:'12/24–12/26',sevilla:'12/26–12/28',granada:'12/28–12/29',barcelona:'12/29–1/3'};
+function tonightHotel(day) {
+  const ev=[...day.events].reverse().find(e=>e.lodgingAction&&LODGING[e.cityId]); if(!ev) return '';
+  const h=hotelsByCity()[ev.cityId], link=hotelLink(h);
+  return `<div class="tonight"><span>🏨 ${/退房|領回/.test(ev.lodgingAction)&&!day.events.some(e=>e.lodgingAction&&/入住|返回|休息/.test(e.lodgingAction)&&Date.parse(e.start)>Date.parse(ev.start))?'今天退房':'今晚住'}</span><b>${esc(h.name)}</b>${navLink(link.dir,'🧭','nav-chip')}<button class="nav-chip" data-action="driver-card" data-city="${ev.cityId}" aria-label="給司機看">🚕</button></div>`;
+}
 function lodgingCard() {
   const hotels=hotelsByCity();
-  return `<section class="settings-card lodging-card" id="lodging"><h2>🏨 我們的住宿</h2><p>填好每座城市的住宿（名稱＋地址，或直接貼 Google 地圖分享連結），行程裡所有「回住宿／公寓」都會出現導航按鈕，也能一鍵「給司機看」。${teamSync.enabled?'已連線團隊同步，填一次四個人都會有。':'連線團隊同步後，填一次四個人都會有。'}</p>
-    ${Object.entries(CITY_NAMES).map(([id,name])=>{const h=state.lodging[id]||{},auto=!state.lodging[id]&&hotels[id],link=hotelLink(hotels[id]);
-      return `<details class="lodging-city" id="lodging-${id}" ${!link?'open':''}><summary><b>${name}</b><small>${LODGING_DATES[id]}</small>${link?`<span class="book book-booked">✅ ${esc(hotels[id].name||'已設定')}</span>`:'<span class="book book-todo">⚠️ 尚未設定</span>'}</summary>
-        ${link?`<div class="actions">${navLink(link.dir,'🏨 導航到住宿')}<button class="button secondary" data-action="driver-card" data-city="${id}">🚕 給司機看</button>${navLink(link.pin,'地圖位置 ↗','inline-link')}</div>`:''}
-        ${auto?'<p class="caption">目前使用同行資料包裡的住宿資料；在下方填寫可以覆蓋。</p>':''}
-        <form data-lodging-form data-city="${id}" class="lodging-form"><label class="field-label">住宿名稱<input name="name" maxlength="80" value="${esc(h.name||'')}" placeholder="例如：公寓或飯店名稱"></label><label class="field-label">地址<input name="address" maxlength="160" value="${esc(h.address||'')}" placeholder="Calle …, número, ciudad"></label><label class="field-label">Google 地圖連結（可選）<input name="url" maxlength="400" inputmode="url" value="${esc(h.url||'')}" placeholder="https://maps.app.goo.gl/…"></label><button class="button primary" type="submit">儲存${name}住宿</button></form>
-      </details>`;}).join('')}
-    <p class="caption">住宿資料只存在這支手機${teamSync.enabled?'與你們的團隊同步資料庫':''}，不會放到公開網站上。</p></section>`;
+  return `<section class="settings-card lodging-card" id="lodging"><h2>🏨 我們的住宿</h2><p>行程裡所有「回住宿／入住／公寓」都已連到這些住宿，每天的地圖和冒險地圖上也有 🏨 標記。</p>
+    ${Object.entries(CITY_NAMES).map(([id,name])=>{const h=hotels[id],link=hotelLink(h);if(!link)return '';
+      return `<article class="lodging-city" id="lodging-${id}"><div class="lodging-head"><b>${name}</b><small>${esc(h.nights||LODGING_DATES[id])}</small></div><h3>${esc(h.name)}</h3>${h.address?`<p class="caption">${esc(h.address)}</p>`:''}<div class="actions">${navLink(link.dir,'🧭 導航到住宿')}<button class="button secondary" data-action="driver-card" data-city="${id}">🚕 給司機看</button>${navLink(link.pin,'Google 地圖 ↗','inline-link')}</div></article>`;}).join('')}
+    <p class="caption">住宿連結由團員提供；網址分享給朋友時，朋友也看得到住宿位置。</p></section>`;
 }
 // Big one-tap buttons for the moments you just need to get somewhere.
 function quickNav(current,next) {
@@ -352,6 +355,11 @@ const WEEKDAY=['日','一','二','三','四','五','六'];
 function dayLabel(day) { const d=new Date(day.date+'T12:00:00Z'), i=data().days.indexOf(day); return `D${i+1} · ${d.getUTCMonth()+1}/${d.getUTCDate()}（${WEEKDAY[d.getUTCDay()]}）`; }
 // Info card for a building in the 3D world: every itinerary visit plus related wishes.
 function placeCard(key, opts={}) {
+  if (key.endsWith('|hotel')) {
+    const city=key.split('|')[0], h=hotelsByCity()[city], link=hotelLink(h);
+    const days=data().days.filter(d=>d.events.some(e=>e.lodgingAction&&e.cityId===city));
+    return `<p class="wc-desc">這是我們在${esc(CITY_NAMES[city])}的住宿（${esc(h?.nights||'')}）。</p><div class="actions">${link?navLink(link.dir,'🧭 導航到住宿'):''}<button class="button secondary" data-action="driver-card" data-city="${city}">🚕 給司機看</button>${link?navLink(link.pin,'Google 地圖 ↗','inline-link'):''}</div>${days.map(d=>`<section class="wc-visit"><div class="wc-when"><span>${esc(dayLabel(d))}</span><button class="text-button" data-action="day" data-date="${d.date}">看當天行程 →</button></div>${d.events.filter(e=>e.lodgingAction&&e.cityId===city).map(e=>`<div class="wc-time">${esc(timeLabel(e))} · ${esc(e.lodgingAction)}</div>`).join('')}</section>`).join('')}`;
+  }
   const visits=[];
   for (const day of data().days) {
     for (const e of day.events) {
@@ -429,7 +437,7 @@ function driverCard(city) {
   const h=hotelsByCity()[city], link=hotelLink(h);
   if(!link) return toast('請先在「旅程」頁填寫住宿');
   $('#viewer-title').textContent=`${CITY_NAMES[city]||''}住宿・給司機看`;
-  $('#viewer-body').innerHTML=`<div class="driver-card"><p class="driver-es">Por favor, lléveme a esta dirección:</p><p class="driver-zh">請載我們到這個地址</p>${h.name?`<h2>${esc(h.name)}</h2>`:''}${h.address?`<p class="driver-addr">${esc(h.address)}</p>`:''}<div class="actions">${navLink(link.dir,'🧭 開啟導航')}${navLink(link.pin,'在地圖上看 ↗','button secondary')}</div><p class="caption">${esc(CITY_NAMES[city]||'')} · ${LODGING_DATES[city]||''}</p></div>`;
+  $('#viewer-body').innerHTML=`<div class="driver-card"><p class="driver-es">Por favor, lléveme a este alojamiento:</p><p class="driver-zh">請載我們到這間住宿</p>${h.name?`<p class="driver-addr">${esc(h.name)}</p>`:''}${h.address?`<p class="driver-sub">${esc(h.address)}</p>`:`<p class="driver-sub">${esc(h.city||CITY_NAMES[city]||'')}, España</p>`}<div class="actions">${navLink(link.dir,'🧭 開啟導航')}${navLink(link.pin,'在地圖上看 ↗','button secondary')}</div><p class="caption">${esc(CITY_NAMES[city]||'')} · ${LODGING_DATES[city]||''}</p></div>`;
   $('#viewer').showModal();
 }
 async function openAsset(id) {
@@ -517,13 +525,6 @@ async function action(button) {
 }
 document.addEventListener('click', e => {const b=e.target.closest('[data-action]');if(b) action(b).catch(error=>{if(error.name!=='AbortError')toast(error.message||'操作未完成，請再試一次');});});
 document.addEventListener('submit', async e => {
-  const lodgingForm=e.target.closest('[data-lodging-form]');
-  if(lodgingForm){e.preventDefault();const city=lodgingForm.dataset.city,fd=new FormData(lodgingForm);
-    const v={name:String(fd.get('name')||'').trim().slice(0,80),address:String(fd.get('address')||'').trim().slice(0,160),url:String(fd.get('url')||'').trim().slice(0,400)};
-    if(v.url&&!/^https:\/\//.test(v.url))return toast('地圖連結需以 https:// 開頭');
-    state.lodging[city]=(v.name||v.address||v.url)?v:null;if(!state.lodging[city])delete state.lodging[city];
-    await saveSetting('lodging',state.lodging).catch(()=>{});teamSync.change(`hotel:${city}`,state.lodging[city]||null);
-    sfx.play('coin');render();toast(`已儲存${CITY_NAMES[city]}住宿，行程裡的住宿都能導航了`);return;}
   const syncForm=e.target.closest('[data-sync-form]');
   if(syncForm){e.preventDefault();const code=new FormData(syncForm).get('code')||'';if(!String(code).trim())return;toast('連線中…');const ok=await teamSync.connect(String(code));render();toast(ok?'🎉 已連線！現在和團員共用願望與分帳':teamSync.message);return;}
   const split=e.target.closest('[data-split-form]');
